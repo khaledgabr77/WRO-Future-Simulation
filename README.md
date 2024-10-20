@@ -10,9 +10,10 @@ This repository contains the simulation environment for the WRO (World Robot Oly
 
 ## Requirements
 
-- **ROS 2 Humble**: Follow the instructions [here](https://docs.ros.org/en/humble/Installation.html) to install ROS 2 Humble.
-- **Gazebo Harmonic**: You can install Gazebo Harmonic by following the official [installation guide](https://gazebosim.org/docs/harmonic/install_ubuntu/).
+- **ROS 2 Humble**: Follow the instructions [here](install_humble.sh) to install ROS 2 Humble.
+- **Gazebo Harmonic**: You can install Gazebo Harmonic by following the official [installation guide](install_gz_harmonic.sh).
 - **SDF Model**: The environment is defined using an SDF model file, compatible with Gazebo Harmonic.
+
 
 ## Installation
 
@@ -22,25 +23,29 @@ This repository contains the simulation environment for the WRO (World Robot Oly
    git clone https://github.com/khaledgabr77/WRO-Future-Simulation.git
    ```
 
-2. Navigate to the directory:
+## Requirments 
 
-   ```bash
-   cd WRO-Future-Simulation
-   ```
+1. **sdformat_urdf**
 
-3. Launch the simulation environment with Gazebo:
+    ```bash
+    git clone -b humble https://github.com/ros/sdformat_urdf.git
+    ```
+2. **ros_gz**
+    ```bash
+    https://github.com/gazebosim/ros_gz
+    ```
+3. **GZ_SIM_RESOURCE_PATH**
+    ```bash
+    export GZ_SIM_RESOURCE_PATH="PATH/models"
+    ```
 
-   ```bash
-   gz sim model.sdf
-   ```
+## Run Simulation
 
-![alt text](</images/Screenshot from 2024-10-14 22-00-24.png>)
+```bash
+ros2 launch mrbuggy3_gz_bringup robot_sim.launch.py
+```
 
-## Usage
-
-1. Open Gazebo Harmonic, load the WRO Future environment, and connect it to your ROS 2 Humble setup.
-2. Utilize the provided topics and services to control and monitor your robot within the environment.
-3. The environment is designed for testing robotics solutions under real-world conditions found in the WRO competition.
+![alt text](<Screenshot from 2024-10-19 16-48-58.png>)
 
 ## Contributing
 
