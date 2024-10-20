@@ -32,7 +32,7 @@ This repository contains the simulation environment for the WRO (World Robot Oly
     ```
 2. **ros_gz**
     ```bash
-    https://github.com/gazebosim/ros_gz
+    git clone -b humble https://github.com/gazebosim/ros_gz
     ```
 3. **GZ_SIM_RESOURCE_PATH**
     ```bash
@@ -40,6 +40,12 @@ This repository contains the simulation environment for the WRO (World Robot Oly
     ```
 
 ## Run Simulation
+
+```bash
+cd ros2_ws
+colcon build
+source install/setup.bash
+```
 
 ```bash
 ros2 launch mrbuggy3_gz_bringup robot_sim.launch.py
