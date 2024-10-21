@@ -285,8 +285,11 @@
           </mesh>
         </geometry>
       </visual>
-      <sensor name="lidar" type="gpu_lidar">
+      <!-- <sensor name="lidar" type="gpu_lidar">
+          <pose>0 0 0 0 0 0</pose>
+
         <lidar>
+
           <scan>
             <horizontal>
               <samples>400</samples>
@@ -303,7 +306,39 @@
         </lidar>
         <gz_frame_id>lidar_link</gz_frame_id>
         <alwaysOn>1</alwaysOn>
-        <visualize>false</visualize>
+        <visualize>true</visualize>
+        <update_rate>10</update_rate>
+      </sensor> -->
+            
+      <sensor name="lidar" type="gpu_lidar">
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>1800</samples>
+              <resolution>1</resolution>
+              <min_angle>-1.5707</min_angle>
+              <max_angle>1.5707</max_angle>
+            </horizontal>
+            <!-- <vertical>
+              <samples>16</samples>
+              <resolution>1</resolution>
+              <min_angle>-0.261799</min_angle>
+              <max_angle>0.261799</max_angle>
+            </vertical> -->
+          </scan>
+          <range>
+            <min>0.3</min>
+            <max>5</max>
+            <resolution>0.01</resolution>
+          </range>
+          <noise>
+            <type>gaussian</type>
+            <mean>0</mean>
+            <stddev>0.01</stddev>
+          </noise>
+        </lidar>
+        <!-- <topic>scan</topic> -->
+        <visualize>true</visualize>
         <update_rate>10</update_rate>
       </sensor>
     </link>
