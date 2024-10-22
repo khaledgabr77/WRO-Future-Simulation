@@ -342,12 +342,12 @@
         <camera>
           <horizontal_fov>1.047</horizontal_fov>
           <image>
-            <width>640</width>
-            <height>480</height>
+            <width>320</width>
+            <height>240</height>
           </image>
           <clip>
             <near>0.05</near>
-            <far>15000</far>
+            <far>200</far>
           </clip>
         </camera>
         <always_on>1</always_on>
@@ -496,6 +496,8 @@
       <min_acceleration>-10</min_acceleration>
       <max_acceleration>10</max_acceleration>
       <topic>/cmd_vel</topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_link</child_frame_id>
     </plugin>
     <!-- <plugin
       filename="gz-sim-odometry-publisher-system"

@@ -11,8 +11,9 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 from launch_ros.actions import Node
 
-
 def generate_launch_description():
+
+    robot_name='mrbuggy3'
 
     # Setup project paths
     pkg_project_bringup = get_package_share_directory('mrbuggy3_gz_bringup')
@@ -47,14 +48,6 @@ def generate_launch_description():
         ]
     )
 
-    # Visualize in RViz
-    # rviz = Node(
-    #    package='rviz2',
-    #    executable='rviz2',
-    #    arguments=['-d', os.path.join(pkg_project_bringup, 'config', 'diff_drive.rviz')],
-    #    condition=IfCondition(LaunchConfiguration('rviz'))
-    # )
-
     # Bridge ROS topics and Gazebo messages for establishing communication
     bridge = Node(
         package='ros_gz_bridge',
@@ -66,11 +59,32 @@ def generate_launch_description():
         output='screen'
     )
 
+    # Include odom_to_tf.launch.py and pass frame parameters
+    # odom_to_tf = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         os.path.join(pkg_project_bringup, 'launch', 'odom_to_tf.launch.py')
+    #     ),
+    #     launch_arguments={
+    #         'frame_id': LaunchConfiguration('frame_id'),
+    #         'child_frame_id': LaunchConfiguration('child_frame_id')
+    #     }.items()
+    # )
+
+    # Rviz2
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        output='screen',
+        name='sim_rviz2',
+        arguments=['-d' + os.path.join(pkg_project_bringup, 'rviz', 'rviz.rviz')]
+    )
+
     return LaunchDescription([
         gz_sim,
-        # DeclareLaunchArgument('rviz', default_value='true',
-        #                       description='Open RViz.'),
+        DeclareLaunchArgument('frame_id', default_value='odom', description='Frame ID of the parent frame'),
+        DeclareLaunchArgument('child_frame_id', default_value='base_link', description='Frame ID of the child frame'),
         bridge,
         robot_state_publisher,
-        # rviz
+        rviz_node,
+        # odom_to_tf
     ])
