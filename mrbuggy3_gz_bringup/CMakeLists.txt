@@ -25,6 +25,13 @@ install(
   DESTINATION share/${PROJECT_NAME}/config
 )
 
+# Install project RViz files
+install(
+  DIRECTORY
+    rviz/
+  DESTINATION share/${PROJECT_NAME}/rviz
+)
+
 # Install Python nodes
 install(PROGRAMS
   scripts/odom_to_tf_publisher.py

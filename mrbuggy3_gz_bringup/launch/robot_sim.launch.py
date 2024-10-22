@@ -13,6 +13,8 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
 
+    robot_name='mrbuggy3'
+
     # Setup project paths
     pkg_project_bringup = get_package_share_directory('mrbuggy3_gz_bringup')
     pkg_project_description = get_package_share_directory('mrbuggy3_gz_resource')
@@ -58,14 +60,23 @@ def generate_launch_description():
     )
 
     # Include odom_to_tf.launch.py and pass frame parameters
-    odom_to_tf = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            os.path.join(pkg_project_bringup, 'launch', 'odom_to_tf.launch.py')
-        ),
-        launch_arguments={
-            'frame_id': LaunchConfiguration('frame_id'),
-            'child_frame_id': LaunchConfiguration('child_frame_id')
-        }.items()
+    # odom_to_tf = IncludeLaunchDescription(
+    #     PythonLaunchDescriptionSource(
+    #         os.path.join(pkg_project_bringup, 'launch', 'odom_to_tf.launch.py')
+    #     ),
+    #     launch_arguments={
+    #         'frame_id': LaunchConfiguration('frame_id'),
+    #         'child_frame_id': LaunchConfiguration('child_frame_id')
+    #     }.items()
+    # )
+
+    # Rviz2
+    rviz_node = Node(
+        package='rviz2',
+        executable='rviz2',
+        output='screen',
+        name='sim_rviz2',
+        arguments=['-d' + os.path.join(pkg_project_bringup, 'rviz', 'rviz.rviz')]
     )
 
     return LaunchDescription([
@@ -74,5 +85,6 @@ def generate_launch_description():
         DeclareLaunchArgument('child_frame_id', default_value='base_link', description='Frame ID of the child frame'),
         bridge,
         robot_state_publisher,
-        odom_to_tf
+        rviz_node,
+        # odom_to_tf
     ])

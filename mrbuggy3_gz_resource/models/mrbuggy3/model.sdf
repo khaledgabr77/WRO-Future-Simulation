@@ -496,6 +496,8 @@
       <min_acceleration>-10</min_acceleration>
       <max_acceleration>10</max_acceleration>
       <topic>/cmd_vel</topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_link</child_frame_id>
     </plugin>
     <!-- <plugin
       filename="gz-sim-odometry-publisher-system"
