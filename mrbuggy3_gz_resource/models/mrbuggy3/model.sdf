@@ -197,7 +197,7 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
-            <uri>model://mrbuggy3/meshes/wheel.dae</uri>
+            <uri>meshes/wheel.dae</uri>
           </mesh>
         </geometry>
       </visual>
@@ -264,7 +264,7 @@
     </link>
 
     <link name="lidar_link">
-      <pose>.05 0 .1 0 0 0</pose>
+      <pose>.05 0 .09 0 0 0</pose>
       <inertial>
         <pose>0 0 0 0 0 0</pose>
         <mass>0.17</mass>
@@ -285,17 +285,14 @@
           </mesh>
         </geometry>
       </visual>
-      <!-- <sensor name="lidar" type="gpu_lidar">
-          <pose>0 0 0 0 0 0</pose>
-
+      <sensor name="lidar" type="gpu_lidar">
         <lidar>
-
           <scan>
             <horizontal>
               <samples>400</samples>
               <resolution>1</resolution>
-              <min_angle>-3.14159265359</min_angle>
-              <max_angle>3.14159265359</max_angle>
+              <min_angle>-1.5707</min_angle>
+              <max_angle>1.5707</max_angle>
             </horizontal>
           </scan>
           <range>
@@ -308,40 +305,9 @@
         <alwaysOn>1</alwaysOn>
         <visualize>true</visualize>
         <update_rate>10</update_rate>
-      </sensor> -->
-            
-      <sensor name="lidar" type="gpu_lidar">
-        <lidar>
-          <scan>
-            <horizontal>
-              <samples>1800</samples>
-              <resolution>1</resolution>
-              <min_angle>-1.5707</min_angle>
-              <max_angle>1.5707</max_angle>
-            </horizontal>
-            <!-- <vertical>
-              <samples>16</samples>
-              <resolution>1</resolution>
-              <min_angle>-0.261799</min_angle>
-              <max_angle>0.261799</max_angle>
-            </vertical> -->
-          </scan>
-          <range>
-            <min>0.3</min>
-            <max>5</max>
-            <resolution>0.01</resolution>
-          </range>
-          <noise>
-            <type>gaussian</type>
-            <mean>0</mean>
-            <stddev>0.01</stddev>
-          </noise>
-        </lidar>
-        <!-- <topic>scan</topic> -->
-        <visualize>true</visualize>
-        <update_rate>10</update_rate>
       </sensor>
-    </link>
+    </link>         
+
 
     <joint name="lidar_joint" type="fixed">
       <parent>base_link</parent>
