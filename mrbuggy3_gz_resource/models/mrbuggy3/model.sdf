@@ -342,12 +342,12 @@
         <camera>
           <horizontal_fov>1.047</horizontal_fov>
           <image>
-            <width>640</width>
-            <height>480</height>
+            <width>320</width>
+            <height>240</height>
           </image>
           <clip>
             <near>0.05</near>
-            <far>15000</far>
+            <far>200</far>
           </clip>
         </camera>
         <always_on>1</always_on>

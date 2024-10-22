@@ -11,7 +11,6 @@ from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 
 from launch_ros.actions import Node
 
-
 def generate_launch_description():
 
     # Setup project paths
@@ -47,14 +46,6 @@ def generate_launch_description():
         ]
     )
 
-    # Visualize in RViz
-    # rviz = Node(
-    #    package='rviz2',
-    #    executable='rviz2',
-    #    arguments=['-d', os.path.join(pkg_project_bringup, 'config', 'diff_drive.rviz')],
-    #    condition=IfCondition(LaunchConfiguration('rviz'))
-    # )
-
     # Bridge ROS topics and Gazebo messages for establishing communication
     bridge = Node(
         package='ros_gz_bridge',
@@ -66,11 +57,22 @@ def generate_launch_description():
         output='screen'
     )
 
+    # Include odom_to_tf.launch.py and pass frame parameters
+    odom_to_tf = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_project_bringup, 'launch', 'odom_to_tf.launch.py')
+        ),
+        launch_arguments={
+            'frame_id': LaunchConfiguration('frame_id'),
+            'child_frame_id': LaunchConfiguration('child_frame_id')
+        }.items()
+    )
+
     return LaunchDescription([
         gz_sim,
-        # DeclareLaunchArgument('rviz', default_value='true',
-        #                       description='Open RViz.'),
+        DeclareLaunchArgument('frame_id', default_value='odom', description='Frame ID of the parent frame'),
+        DeclareLaunchArgument('child_frame_id', default_value='base_link', description='Frame ID of the child frame'),
         bridge,
         robot_state_publisher,
-        # rviz
+        odom_to_tf
     ])
