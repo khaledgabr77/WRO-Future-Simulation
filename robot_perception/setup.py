@@ -24,7 +24,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            # 'yolo2pose_node = smart_track.yolo2pose_node:main',
+            'rgb_to_bgr_converter = robot_perception.rgb_to_bgr_converter:main',
         ],
     },
 )

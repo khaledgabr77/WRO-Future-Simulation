@@ -14,8 +14,6 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
 
-    # robot_name='mrbuggy3'
-
     # YOLO
     yolo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -27,13 +25,23 @@ def generate_launch_description():
         launch_arguments={
             'model': '/home/user/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.sim.v11n.seg.pt',
             'threshold' : '0.5',
-            'input_image_topic' : '/rgb_image',
+            'input_image_topic' : '/bgr_image',
             'device': 'cuda:0',
-            # 'image_reliability': '1'
         }.items()
     )
 
+    # RGB to BGR Converter Node
+    rgb_to_bgr_node = Node(
+        package='robot_perception',
+        executable='rgb_to_bgr_converter',
+        name='rgb_to_bgr_converter',
+        remappings=[
+            ('/input_image', LaunchConfiguration('input_image', default='/rgb_image')),
+            ('/output_image', LaunchConfiguration('output_image', default='/bgr_image')),
+        ]
+    )
 
     return LaunchDescription([
-        yolo_launch
+        yolo_launch,
+        rgb_to_bgr_node
     ])
