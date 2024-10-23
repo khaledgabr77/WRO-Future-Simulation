@@ -499,33 +499,7 @@
       <frame_id>odom</frame_id>
       <child_frame_id>base_link</child_frame_id>
     </plugin>
-    <!-- <plugin
-      filename="gz-sim-odometry-publisher-system"
-      name="gz::sim::systems::OdometryPublisher">
-      <xyz_offset>0 0 0</xyz_offset>
-      <rpy_offset>0 0 0</rpy_offset>
-      <gaussian_noise>0</gaussian_noise>
-      <robot_base_frame>base_link</robot_base_frame>
-      <dimensions>3</dimensions>
-      <odom_publish_frequency>30</odom_publish_frequency>
-      <odom_frame>odom</odom_frame>
-    </plugin> -->
-    <!-- <plugin
-      filename="gz-sim-linearbatteryplugin-system"
-      name="gz::sim::systems::LinearBatteryPlugin">
-      <battery_name>linear_battery</battery_name>
-      <voltage>12.6</voltage>
-      <open_circuit_voltage_constant_coef>12.6</open_circuit_voltage_constant_coef>
-      <open_circuit_voltage_linear_coef>-3.0</open_circuit_voltage_linear_coef>
-      <initial_charge>4.8</initial_charge>
-      <capacity>5.0</capacity>
-      <resistance>0.07</resistance>
-      <smooth_current_tau>2.0</smooth_current_tau>
-      <soc_threshold>0.51</soc_threshold>
-      <power_load>48.0</power_load>
-      <fix_issue_225>true</fix_issue_225>
-      <start_draining>true</start_draining>
-    </plugin> -->
+    
     <plugin
       filename="gz-sim-joint-state-publisher-system"
       name="gz::sim::systems::JointStatePublisher">
@@ -533,13 +507,9 @@
       <joint_name>RearLeftwheelJoint</joint_name>
       <joint_name>FrontRightwheelJoint</joint_name>
       <joint_name>FrontLeftwheelJoint</joint_name>
-    </plugin>
-    <plugin
-      filename="gz-sim-joint-state-publisher-system"
-      name="gz::sim::systems::JointStatePublisher">
       <joint_name>FrontRightwheelSteeringJoint</joint_name>
       <joint_name>FrontLeftwheelSteeringJoint</joint_name>
-      <topic>steering</topic>
     </plugin>
+
   </model>
 </sdf>
