@@ -33,6 +33,7 @@ def generate_launch_description():
             pkg_project_description,
             'worlds',
             'default.sdf'
+            # 'wro_no_obstacle.sdf'
         ])}.items(),
     )
 

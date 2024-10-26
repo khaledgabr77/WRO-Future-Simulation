@@ -145,10 +145,10 @@
       </spot>
     </light>
     <include>
-      <uri>model://wro_env/model.sdf</uri>
+      <uri>model://wro_env_no_obstacles/model.sdf</uri>
     </include>
     <include>
-      <pose>0 -0.7 0.04 0 0 0</pose>
+      <pose>0 -0.3 0.04 0 0 0</pose>
       <uri>model://mrbuggy3/model.sdf</uri>
     </include> 
   </world>

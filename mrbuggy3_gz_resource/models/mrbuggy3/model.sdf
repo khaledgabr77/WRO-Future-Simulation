@@ -468,18 +468,20 @@
     <plugin
         filename="gz-sim-joint-controller-system"
         name="gz::sim::systems::JointController">
-      <joint_name>FrontLeftwheelJoint</joint_name>
-      <joint_name>FrontRightwheelJoint</joint_name>
+      <!-- <joint_name>FrontLeftwheelJoint</joint_name> -->
+      <!-- <joint_name>FrontRightwheelJoint</joint_name> -->
       <joint_name>RearRightwheelJoint</joint_name>
       <joint_name>RearLeftwheelJoint</joint_name>
-      <!-- <sub_topic>drive</sub_topic> -->
-      <use_actuator_msg>true</use_actuator_msg>
-      <actuator_number>0</actuator_number>
+      <topic>drive</topic>
+      <!-- <use_actuator_msg>true</use_actuator_msg> -->
+      <!-- <actuator_number>0</actuator_number> -->
     </plugin>
 
     <plugin
       filename="gz-sim-ackermann-steering-system"
       name="gz::sim::systems::AckermannSteering">
+      <steering_only>true</steering_only>
+      <use_actuator_msg>false</use_actuator_msg>
       <left_joint>FrontLeftwheelJoint</left_joint>
       <left_joint>RearLeftwheelJoint</left_joint>
       <right_joint>RearRightwheelJoint</right_joint>
@@ -495,7 +497,7 @@
       <max_velocity>10.0</max_velocity>
       <min_acceleration>-10</min_acceleration>
       <max_acceleration>10</max_acceleration>
-      <topic>/cmd_vel</topic>
+      <!-- <topic>/cmd_vel</topic> -->
       <frame_id>odom</frame_id>
       <child_frame_id>base_link</child_frame_id>
     </plugin>
