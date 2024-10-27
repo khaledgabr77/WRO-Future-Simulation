@@ -19,7 +19,7 @@ public:
     {
         // Initialize parameters
         this->declare_parameter<double>("car_width", 0.5);
-        this->declare_parameter<double>("safety_radius", 0.5);
+        this->declare_parameter<double>("safety_radius", 0.2);
         this->declare_parameter<double>("max_speed", 2.0);
         this->declare_parameter<double>("min_speed", 0.5);
         this->declare_parameter<double>("max_range", 3.0);
@@ -348,163 +348,116 @@ private:
         }
     }
 
-    std::pair<size_t, size_t> findBestGap()
+std::pair<size_t, size_t> findBestGap()
+{
+    size_t num_ranges = processed_scan_.ranges.size();
+
+    // Define the window size based on the car width and a reference range
+    double reference_range = 0.25;//max_range_; // Use max_range_ as reference
+    double max_angle = 2 * std::atan2(car_width_ / 2.0, reference_range); // Angular width needed
+
+    // Convert max_angle to number of indices (window size)
+    size_t window_size = static_cast<size_t>(std::ceil(max_angle / processed_scan_.angle_increment));
+
+    // Ensure window size is at least 1 and not larger than the number of ranges
+    window_size = std::max<size_t>(1, std::min(window_size, num_ranges));
+
+    RCLCPP_INFO(this->get_logger(), "Window size for sliding: %zu indices", window_size);
+
+    size_t best_start_idx = 0;
+    float best_window_avg_depth = 0.0f;
+    bool found_valid_window = false;
+
+    // Define the safety angle in terms of indices
+    double safety_angle =15.0 * M_PI / 180.0; // 15 degrees in radians
+    size_t safety_zone_indices = static_cast<size_t>(std::ceil(safety_angle / processed_scan_.angle_increment));
+
+    // Slide the window over the ranges
+    for (size_t start_idx = 0; start_idx <= num_ranges - window_size; ++start_idx)
     {
-        struct Gap
+        size_t end_idx = start_idx + window_size - 1;
+
+        bool window_valid = true;
+        float window_sum_range = 0.0f;
+
+        // Check validity within the window
+        for (size_t i = start_idx; i <= end_idx; ++i)
         {
-            size_t start_idx;
-            size_t end_idx;
-            float min_depth;       // Minimum range within the gap
-            size_t size;           // Number of points in the gap
-            double angular_width;  // Angular width of the gap in radians
-            double physical_width; // Physical width of the gap in meters
-        };
-
-        std::vector<Gap> valid_gaps;
-
-        size_t current_gap_start = 0;
-        size_t current_gap_size = 0;
-        float current_gap_min_depth = 0.0f;
-
-        size_t num_ranges = processed_scan_.ranges.size();
-        double min_gap_width = car_width_;
-        double min_gap_angle = 2 * std::atan2(min_gap_width / 2.0, max_range_);
-        size_t min_gap_points = static_cast<size_t>(min_gap_angle / processed_scan_.angle_increment);
-
-        // Define a maximum allowable discontinuity threshold
-        const float max_discontinuity_threshold = 0.2f; // Adjust as needed (in meters)
-
-        // Iterate through the ranges to find valid gaps
-        for (size_t i = 0; i < num_ranges; ++i)
-        {
-            if (processed_scan_.ranges[i] > 0.0f)
+            float range = processed_scan_.ranges[i];
+            if (range <= 0.0f || std::isnan(range) || std::isinf(range))
             {
-                if (current_gap_size == 0)
+                window_valid = false;
+                break;
+            }
+
+            // Accumulate range values
+            window_sum_range += range;
+        }
+
+        if (window_valid)
+        {
+            // Compute average depth within the window
+            float window_avg_range = window_sum_range / window_size;
+
+            // **Check ranges after the end index and before the start index within safety angles**
+            bool obstacles_in_safety_zone = false;
+
+            // Check ranges after the end index
+            size_t safety_zone_end_idx = std::min(end_idx + safety_zone_indices, num_ranges - 1);
+            for (size_t i = end_idx + 1; i <= safety_zone_end_idx; ++i)
+            {
+                float range = processed_scan_.ranges[i];
+                if (range <= 0.3)
                 {
-                    // Start a new gap
-                    current_gap_start = i;
-                    current_gap_min_depth = processed_scan_.ranges[i];
-                    current_gap_size = 1;
-                }
-                else
-                {
-                    // Check for discontinuity with the previous point
-                    float range_diff = std::abs(processed_scan_.ranges[i] - processed_scan_.ranges[i - 1]);
-
-                    if (range_diff <= max_discontinuity_threshold)
-                    {
-                        // Continue the current gap
-                        current_gap_size++;
-                        current_gap_min_depth = std::min(current_gap_min_depth, processed_scan_.ranges[i]);
-                    }
-                    else
-                    {
-                        // Discontinuity detected, end the current gap
-                        if (current_gap_size >= min_gap_points)
-                        {
-                            // Calculate angular width
-                            double angular_width = current_gap_size * processed_scan_.angle_increment;
-
-                            // Calculate average range for the gap
-                            float sum_ranges = 0.0f;
-                            for (size_t j = current_gap_start; j < i; ++j)
-                            {
-                                sum_ranges += processed_scan_.ranges[j];
-                            }
-                            float avg_range = sum_ranges / static_cast<float>(current_gap_size);
-
-                            // Calculate physical width
-                            double physical_width = 2.0 * avg_range * std::sin(angular_width / 2.0);
-
-                            // Check if physical width satisfies the robot's width
-                            if (physical_width >= min_gap_width)
-                            {
-                                valid_gaps.push_back({current_gap_start, i - 1, current_gap_min_depth, current_gap_size, angular_width, physical_width});
-                            }
-                        }
-                        // Start a new gap
-                        current_gap_start = i;
-                        current_gap_min_depth = processed_scan_.ranges[i];
-                        current_gap_size = 1;
-                    }
+                    obstacles_in_safety_zone = true;
+                    break;
                 }
             }
-            else
+
+            // Check ranges before the start index
+            size_t safety_zone_start_idx = (start_idx >= safety_zone_indices) ? (start_idx - safety_zone_indices) : 0;
+            for (size_t i = safety_zone_start_idx; i < start_idx; ++i)
             {
-                // Current point is invalid, end the current gap if it exists
-                if (current_gap_size >= min_gap_points)
+                float range = processed_scan_.ranges[i];
+                if (range <= 0.3)
                 {
-                    // Calculate angular width
-                    double angular_width = current_gap_size * processed_scan_.angle_increment;
-
-                    // Calculate average range for the gap
-                    float sum_ranges = 0.0f;
-                    for (size_t j = current_gap_start; j < i; ++j)
-                    {
-                        sum_ranges += processed_scan_.ranges[j];
-                    }
-                    float avg_range = sum_ranges / static_cast<float>(current_gap_size);
-
-                    // Calculate physical width
-                    double physical_width = 2.0 * avg_range * std::sin(angular_width / 2.0);
-
-                    // Check if physical width satisfies the robot's width
-                    if (physical_width >= min_gap_width)
-                    {
-                        valid_gaps.push_back({current_gap_start, i - 1, current_gap_min_depth, current_gap_size, angular_width, physical_width});
-                    }
+                    obstacles_in_safety_zone = true;
+                    break;
                 }
-                current_gap_size = 0;
-                current_gap_min_depth = 0.0f;
             }
-        }
 
-        // Handle the last gap if it reaches the end of the scan
-        if (current_gap_size >= min_gap_points)
-        {
-            // Calculate angular width
-            double angular_width = current_gap_size * processed_scan_.angle_increment;
-
-            // Calculate average range for the gap
-            float sum_ranges = 0.0f;
-            for (size_t j = current_gap_start; j < num_ranges; ++j)
+            if (!obstacles_in_safety_zone)
             {
-                sum_ranges += processed_scan_.ranges[j];
-            }
-            float avg_range = sum_ranges / static_cast<float>(current_gap_size);
-
-            // Calculate physical width
-            double physical_width = 2.0 * avg_range * std::sin(angular_width / 2.0);
-
-            // Check if physical width satisfies the robot's width
-            if (physical_width >= min_gap_width)
-            {
-                valid_gaps.push_back({current_gap_start, num_ranges - 1, current_gap_min_depth, current_gap_size, angular_width, physical_width});
+                // This window is valid, compare its average depth with the best one found
+                if (!found_valid_window || window_avg_range > best_window_avg_depth)
+                {
+                    best_start_idx = start_idx;
+                    best_window_avg_depth = window_avg_range;
+                    found_valid_window = true;
+                }
             }
         }
-
-        if (valid_gaps.empty())
-        {
-            // No valid gap found
-            RCLCPP_WARN(this->get_logger(), "No valid gap found after applying continuity and width constraints.");
-            return {0, 0};
-        }
-
-        // Find the gap with the widest angular width
-        Gap widest_gap = valid_gaps[0];
-        for (const auto &gap : valid_gaps)
-        {
-            if (gap.angular_width > widest_gap.angular_width)
-            {
-                widest_gap = gap;
-            }
-        }
-
-        RCLCPP_DEBUG(this->get_logger(), "Widest gap found from index %zu to %zu with physical width %.2f meters and angular width %.4f radians",
-                    widest_gap.start_idx, widest_gap.end_idx, widest_gap.physical_width, widest_gap.angular_width);
-
-        return {widest_gap.start_idx, widest_gap.end_idx};
     }
+
+    if (!found_valid_window)
+    {
+        RCLCPP_WARN(this->get_logger(), "No valid gap found after sliding.");
+        return {0, 0};
+    }
+
+    size_t best_end_idx = best_start_idx + window_size - 1;
+
+    RCLCPP_DEBUG(this->get_logger(), "Best window found from index %zu to %zu with average depth %.2f meters",
+                 best_start_idx, best_end_idx, best_window_avg_depth);
+
+    return {best_start_idx, best_end_idx};
+}
+
+
+
+
+
+
 
     size_t findBestPoint(size_t start_idx, size_t end_idx)
     {

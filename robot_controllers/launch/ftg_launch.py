@@ -12,10 +12,10 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 {'wheel_base': 0.2255},
-                {'car_width': 0.2},
+                {'car_width': 0.17},
                 {'wheel_radius': 0.0365},
-                {'safety_radius': 0.1},
-                {'max_speed': 0.5},
+                {'safety_radius': 0.05},
+                {'max_speed': 0.4},
                 {'min_speed': 0.2},
                 {'max_range': 4.0},
                 {'field_of_view': 170.0},  # Set desired FOV in degrees
