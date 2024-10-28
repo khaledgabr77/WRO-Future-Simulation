@@ -279,7 +279,8 @@ private:
         float ratio = safety_radius_ / processed_scan_.ranges[closest_idx];
         if (ratio > 1.0f)
             ratio = 1.0f;
-        float theta = std::asin(ratio);
+        // float theta = std::asin(ratio);
+        float theta = std::atan2(safety_radius_, processed_scan_.ranges[closest_idx]);
 
         // Calculate the number of points to clear around the closest point
         size_t bubble_size = static_cast<size_t>(theta / processed_scan_.angle_increment);
@@ -314,7 +315,7 @@ private:
 
             float range_diff = std::abs(r2 - r1);
 
-            if (range_diff > 5.0) // TODO: Make this a parameter (e.g., declare_parameter)
+            if (range_diff > 1.0) // TODO: Make this a parameter (e.g., declare_parameter)
             {
                 // Calculate the number of points to extend
                 float min_range = std::min(r1, r2);
@@ -326,7 +327,8 @@ private:
                 if (ratio > 1.0f)
                     ratio = 1.0f;
 
-                float theta = std::asin(ratio);
+                // float theta = std::asin(ratio);
+                float theta = std::atan2(car_half_width, min_range);
                 size_t num_points = static_cast<size_t>(theta / angle_increment);
 
                 if (r1 < r2)
@@ -505,7 +507,7 @@ std::pair<size_t, size_t> findBestGap()
 
         float speed = static_cast<float>(min_speed_);
 
-        if (min_range > safety_radius_)
+        if (min_range > (safety_radius_*2))
         {
             speed = static_cast<float>(min_speed_ + (max_speed_ - min_speed_) * ((min_range - safety_radius_) / (max_range_ - safety_radius_)));
             speed = std::min(speed, static_cast<float>(max_speed_));
@@ -522,7 +524,9 @@ std::pair<size_t, size_t> findBestGap()
     {
         // Calculate steering angle based on the best point index
         // Angle = angle_min + index * angle_increment
-        float angle = processed_scan_.angle_min + (static_cast<float>(best_point_idx) * processed_scan_.angle_increment);
+        // float angle = processed_scan_.angle_min + (static_cast<float>(best_point_idx) * processed_scan_.angle_increment);
+        float angle = (static_cast<float>(best_point_idx) - (processed_scan_.ranges.size() / 2) )  * processed_scan_.angle_increment;
+        // angle /= 1.5; // Scale down for smoother steering
         return angle;
     }
 
