@@ -9,6 +9,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.substitutions import FindPackageShare
+from math import radians
 
 from launch_ros.actions import Node
 
@@ -23,7 +24,7 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            'model': '/home/user/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.sim.v11n.seg.pt',
+            'model': '/home/khaled/wro_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.sim.v11n.seg.pt',
             'threshold' : '0.5',
             'input_image_topic' : '/bgr_image',
             'device': 'cuda:0',
@@ -41,7 +42,14 @@ def generate_launch_description():
         ]
     )
 
+    # lidar image projection
+    lidar2image_node = Node(
+        package='robot_perception',
+        executable='lidar2image_node',
+        name='lidar2image_node',
+    )
     return LaunchDescription([
         yolo_launch,
-        rgb_to_bgr_node
+        rgb_to_bgr_node,
+        lidar2image_node
     ])

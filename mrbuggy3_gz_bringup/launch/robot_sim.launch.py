@@ -34,6 +34,7 @@ def generate_launch_description():
             'worlds',
             'default.sdf'
             # 'wro_no_obstacle.sdf'
+            #'wro_one_obstacle.sdf'
         ])}.items(),
     )
 
@@ -79,7 +80,21 @@ def generate_launch_description():
         name='sim_rviz2',
         arguments=['-d' + os.path.join(pkg_project_bringup, 'rviz', 'rviz.rviz')]
     )
-
+    # Static TF base_link -> mono_camera
+    # .15 0 .25 0 0 1.5707
+    cam_x = 0.05
+    cam_y = 0.0
+    cam_z = 0.15 
+    cam_roll = radians(-90.0)
+    cam_pitch = 0.0
+    cam_yaw = radians(-90.0)
+    cam_tf_node = Node(
+        package='tf2_ros',
+        name='base2depth_tf_node',
+        executable='static_transform_publisher',
+        arguments=[str(cam_x), str(cam_y), str(cam_z), str(cam_yaw), str(cam_pitch), str(cam_roll), 'base_link', 'camera_link'],
+        
+    )
     return LaunchDescription([
         gz_sim,
         DeclareLaunchArgument('frame_id', default_value='odom', description='Frame ID of the parent frame'),
@@ -88,4 +103,5 @@ def generate_launch_description():
         robot_state_publisher,
         rviz_node,
         # odom_to_tf
+        cam_tf_node
     ])

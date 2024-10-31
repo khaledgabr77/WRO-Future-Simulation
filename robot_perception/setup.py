@@ -25,6 +25,8 @@ setup(
     entry_points={
         'console_scripts': [
             'rgb_to_bgr_converter = robot_perception.rgb_to_bgr_converter:main',
+            'lidar2image_node = robot_perception.lidar2image_node:main',
+
         ],
     },
 )
