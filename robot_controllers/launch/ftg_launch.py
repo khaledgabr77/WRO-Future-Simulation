@@ -21,6 +21,15 @@ def generate_launch_description():
                 {'field_of_view': 180.0},  # Set desired FOV in degrees
                 {'enable_disparity_extender': True},  # Set to False to disable
                 {'enable_corner_case': False},  # Set to False to disable
+                {'use_labeled_scan': True},
+                {'publish_speed': True},
+                {'discontinuity_threshold': 0.3},
+                {'safety_angle_degrees': 15.0},
+                {'obstacle_threshold': 0.5},
+                {'gap_window_size': 20},
+            ],
+            remappings=[
+            ('/scan', '/labeled_scan'),
             ],
             arguments=['--ros-args', '--log-level', 'info'],
         ),

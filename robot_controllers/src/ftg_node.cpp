@@ -30,6 +30,13 @@ public:
         this->declare_parameter<double>("wheel_radius", 0.03);
         this->declare_parameter<double>("time_horizon", 1.0); // Time to predict ahead in seconds
         this->declare_parameter<double>("steering_smoothing_factor", 0.1); // For smoothing steering angles
+        this->declare_parameter<bool>("use_labeled_scan", true);
+        this->declare_parameter<bool>("publish_speed", true);
+        this->declare_parameter<double>("discontinuity_threshold", 0.3); // Adjust as needed
+        this->declare_parameter<double>("safety_angle_degrees", 15.0);
+        this->declare_parameter<double>("obstacle_threshold", 0.2);
+        this->declare_parameter<int>("gap_window_size", 5); // Adjust as needed
+
 
         // Get parameters
         car_width_ = this->get_parameter("car_width").as_double();
@@ -44,6 +51,17 @@ public:
         wheel_radius_ = this->get_parameter("wheel_radius").as_double();
         time_horizon_ = this->get_parameter("time_horizon").as_double();
         steering_smoothing_factor_ = this->get_parameter("steering_smoothing_factor").as_double();
+        use_labeled_scan_ = this->get_parameter("use_labeled_scan").as_bool();
+        publish_speed_ = this->get_parameter("publish_speed").as_bool();
+        discontinuity_threshold_ = this->get_parameter("discontinuity_threshold").as_double();
+        safety_angle_degrees_ = this->get_parameter("safety_angle_degrees").as_double();
+        obstacle_threshold_ = this->get_parameter("obstacle_threshold").as_double();
+        gap_window_size_ = static_cast<size_t>(this->get_parameter("gap_window_size").as_int());
+        if (gap_window_size_ <= 0)
+        {
+            RCLCPP_WARN(this->get_logger(), "gap_window_size parameter is ot positive (%d). Using default value of 5.", gap_window_size_);
+            gap_window_size_ = static_cast<size_t>(5);
+        }
 
         // Initialize processed_scan_
         processed_scan_.header.frame_id = "laser_frame"; // Update as per your frame
@@ -94,8 +112,14 @@ private:
     double field_of_view_;
     bool enable_disparity_extender_;
     bool enable_corner_case_;
+    bool use_labeled_scan_;
+    bool publish_speed_ ;
     double time_horizon_; // Time to predict ahead
     double steering_smoothing_factor_; // For smoothing steering angles
+    double discontinuity_threshold_;
+    double safety_angle_degrees_;
+    double obstacle_threshold_;
+    size_t gap_window_size_;
 
     // Processed LaserScan
     sensor_msgs::msg::LaserScan processed_scan_;
@@ -142,6 +166,13 @@ private:
         // Step 2: Apply safety bubble
         RCLCPP_DEBUG(this->get_logger(), "Step 2: Applying safety bubble");
         applySafetyBubble();
+
+        if (use_labeled_scan_)
+        {
+            // Process the intensities to adjust ranges based on object classes
+            RCLCPP_DEBUG(this->get_logger(), "Processing intensities for labeled objects");
+            processIntensities();
+        }
 
         // Step 3: Optionally apply disparity extender
         if (enable_disparity_extender_)
@@ -190,8 +221,11 @@ private:
         RCLCPP_INFO(this->get_logger(), "Steering Angle: %.3f radians, Speed: %.3f m/s", steering_angle, speed);
 
         // Step 8: Publish drive command
-        RCLCPP_DEBUG(this->get_logger(), "Step 8: Publishing drive command");
-        publishDriveCommand(steering_angle, speed);
+        if (publish_speed_)
+        {
+            RCLCPP_DEBUG(this->get_logger(), "Step 8: Publishing drive command");
+            publishDriveCommand(steering_angle, speed);
+        }
 
         // Publish visualization marker
         publishMarker(steering_angle, scan_msg->header);
@@ -232,6 +266,17 @@ private:
         // Extract the limited FOV ranges
         std::vector<float> limited_ranges(scan_msg->ranges.begin() + start_idx, scan_msg->ranges.begin() + end_idx + 1);
 
+        std::vector<float> limited_intensities;
+        if (scan_msg->intensities.size() >= scan_msg->ranges.size())
+        {
+            limited_intensities.assign(scan_msg->intensities.begin() + start_idx, scan_msg->intensities.begin() + end_idx + 1);
+        }
+        else
+        {
+            // If intensities are not available or not matching ranges size, fill with zeros
+            limited_intensities.assign(limited_ranges.size(), 0.0f);
+        }
+
         // Remove NaNs and infs, cap ranges at max_range_
         float max_range = static_cast<float>(max_range_);
         for (float &range : limited_ranges)
@@ -254,6 +299,7 @@ private:
         processed_scan_.range_min = scan_msg->range_min;
         processed_scan_.range_max = scan_msg->range_max;
         processed_scan_.ranges = limited_ranges;
+        processed_scan_.intensities = limited_intensities;
 
         // Debugging: Log the adjusted angles
         RCLCPP_DEBUG(this->get_logger(), "Preprocessed LiDAR:");
@@ -261,6 +307,69 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Max: %.4f radians", processed_scan_.angle_max);
         RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Increment: %.6f radians", processed_scan_.angle_increment);
         RCLCPP_DEBUG(this->get_logger(), "Number of ranges after preprocessing: %zu", processed_scan_.ranges.size());
+    }
+
+    
+    void processIntensities()
+    {
+        if (processed_scan_.intensities.size() != processed_scan_.ranges.size())
+        {
+            RCLCPP_WARN(this->get_logger(), "Intensities size does not match ranges size. Skipping processIntensities.");
+            return;
+        }
+
+        size_t closest_idx = 0;
+        float min_range = 1.0;//std::numeric_limits<float>::max();
+        int label = 0; // 1 for green, 2 for red
+
+        bool found = false;
+
+        for (size_t i = 0; i < processed_scan_.ranges.size(); ++i)
+        {
+            float range = processed_scan_.ranges[i];
+            float intensity = processed_scan_.intensities[i];
+
+            // Check if intensity is 1 or 2
+            int int_intensity = static_cast<int>(intensity + 0.5f); // Round to nearest int
+
+            if ((int_intensity == 1 || int_intensity == 2) && range > 0.0f)
+            {
+                if (range < min_range)
+                {
+                    min_range = range;
+                    closest_idx = i;
+                    label = int_intensity;
+                    found = true;
+                }
+            }
+        }
+
+        if (found)
+        {
+            RCLCPP_INFO(this->get_logger(), "Closest labeled object at index %zu, range %.2f, label %d", closest_idx, min_range, label);
+
+            // Modify the ranges based on the label
+            if (label == 1)
+            {
+                // Green object: modify ranges on the right
+                for (size_t i = 0; i < closest_idx; ++i)
+                {
+                    processed_scan_.ranges[i] = min_range;
+                }
+            }
+            else if (label == 2)
+            {
+                // Red object: modify ranges on the left
+                for (size_t i = closest_idx + 1; i < processed_scan_.ranges.size(); ++i)
+                {
+                    processed_scan_.ranges[i] = min_range;
+                }
+            }
+        }
+        else
+        {
+            RCLCPP_DEBUG(this->get_logger(), "No labeled objects found in intensities.");
+        }
     }
 
     void applySafetyBubble()
@@ -350,110 +459,114 @@ private:
         }
     }
 
-std::pair<size_t, size_t> findBestGap()
-{
-    size_t num_ranges = processed_scan_.ranges.size();
 
-    // Define the window size based on the car width and a reference range
-    double reference_range = 0.25;//max_range_; // Use max_range_ as reference
-    double max_angle = 2 * std::atan2(car_width_ / 2.0, reference_range); // Angular width needed
-
-    // Convert max_angle to number of indices (window size)
-    size_t window_size = static_cast<size_t>(std::ceil(max_angle / processed_scan_.angle_increment));
-
-    // Ensure window size is at least 1 and not larger than the number of ranges
-    window_size = std::max<size_t>(1, std::min(window_size, num_ranges));
-
-    RCLCPP_INFO(this->get_logger(), "Window size for sliding: %zu indices", window_size);
-
-    size_t best_start_idx = 0;
-    float best_window_avg_depth = 0.0f;
-    bool found_valid_window = false;
-
-    // Define the safety angle in terms of indices
-    double safety_angle =15.0 * M_PI / 180.0; // 15 degrees in radians
-    size_t safety_zone_indices = static_cast<size_t>(std::ceil(safety_angle / processed_scan_.angle_increment));
-
-    // Slide the window over the ranges
-    for (size_t start_idx = 0; start_idx <= num_ranges - window_size; ++start_idx)
+    bool isWindowSafe(size_t start_idx, size_t end_idx, size_t safety_zone_indices)
     {
-        size_t end_idx = start_idx + window_size - 1;
+        size_t num_ranges = processed_scan_.ranges.size();
 
-        bool window_valid = true;
-        float window_sum_range = 0.0f;
-
-        // Check validity within the window
-        for (size_t i = start_idx; i <= end_idx; ++i)
+        // Check ranges after the end index
+        size_t safety_zone_end_idx = std::min(end_idx + safety_zone_indices, num_ranges - 1);
+        for (size_t i = end_idx + 1; i <= safety_zone_end_idx; ++i)
         {
             float range = processed_scan_.ranges[i];
-            if (range <= 0.0f || std::isnan(range) || std::isinf(range))
+            if (range > 0.0f && range < obstacle_threshold_)
             {
-                window_valid = false;
-                break;
+                return false;
             }
-
-            // Accumulate range values
-            window_sum_range += range;
         }
 
-        if (window_valid)
+        // Check ranges before the start index
+        size_t safety_zone_start_idx = (start_idx >= safety_zone_indices) ? (start_idx - safety_zone_indices) : 0;
+        for (size_t i = safety_zone_start_idx; i < start_idx; ++i)
         {
-            // Compute average depth within the window
-            float window_avg_range = window_sum_range / window_size;
+            float range = processed_scan_.ranges[i];
+            if (range > 0.0f && range < safety_radius_)
+            {
+                return false;
+            }
+        }
 
-            // **Check ranges after the end index and before the start index within safety angles**
-            bool obstacles_in_safety_zone = false;
+        // No obstacles detected in safety zones
+        return true;
+    }
 
-            // Check ranges after the end index
-            size_t safety_zone_end_idx = std::min(end_idx + safety_zone_indices, num_ranges - 1);
-            for (size_t i = end_idx + 1; i <= safety_zone_end_idx; ++i)
+    std::pair<size_t, size_t> findBestGap()
+    {
+        size_t num_ranges = processed_scan_.ranges.size();
+        size_t best_start_idx = 0;
+        float best_window_max_depth = 0.0f;
+        bool found_valid_window = false;
+
+        // Calculate safety angle in terms of indices
+        double safety_angle_rad = safety_angle_degrees_ * M_PI / 180.0;
+        size_t safety_zone_indices = static_cast<size_t>(std::ceil(safety_angle_rad / processed_scan_.angle_increment));
+
+        // Slide the fixed-size window over the ranges
+        for (size_t start_idx = 0; start_idx <= num_ranges - gap_window_size_; ++start_idx)
+        {
+            size_t end_idx = start_idx + gap_window_size_ - 1;
+
+            bool window_valid = true;
+            float window_max_range = 0.0f;
+
+            // Check validity within the window
+            for (size_t i = start_idx; i <= end_idx; ++i)
             {
                 float range = processed_scan_.ranges[i];
-                if (range <= 0.3)
+                if (range <= 0.0f || std::isnan(range) || std::isinf(range))
                 {
-                    obstacles_in_safety_zone = true;
+                    window_valid = false;
                     break;
+                }
+
+                // Check for discontinuities
+                if (i > start_idx)
+                {
+                    float prev_range = processed_scan_.ranges[i - 1];
+                    float range_diff = std::abs(range - prev_range);
+                    if (range_diff > discontinuity_threshold_)
+                    {
+                        window_valid = false;
+                        break;
+                    }
+                }
+
+                // Update the maximum range within the window
+                if (range > window_max_range)
+                {
+                    window_max_range = range;
                 }
             }
 
-            // Check ranges before the start index
-            size_t safety_zone_start_idx = (start_idx >= safety_zone_indices) ? (start_idx - safety_zone_indices) : 0;
-            for (size_t i = safety_zone_start_idx; i < start_idx; ++i)
+            if (window_valid)
             {
-                float range = processed_scan_.ranges[i];
-                if (range <= 0.3)
+                // Check safety zones
+                if (isWindowSafe(start_idx, end_idx, safety_zone_indices))
                 {
-                    obstacles_in_safety_zone = true;
-                    break;
-                }
-            }
-
-            if (!obstacles_in_safety_zone)
-            {
-                // This window is valid, compare its average depth with the best one found
-                if (!found_valid_window || window_avg_range > best_window_avg_depth)
-                {
-                    best_start_idx = start_idx;
-                    best_window_avg_depth = window_avg_range;
-                    found_valid_window = true;
+                    // This window is valid, compare its maximum depth with the best one found
+                    if (!found_valid_window || window_max_range > best_window_max_depth)
+                    {
+                        best_start_idx = start_idx;
+                        best_window_max_depth = window_max_range;
+                        found_valid_window = true;
+                    }
                 }
             }
         }
+
+        if (!found_valid_window)
+        {
+            RCLCPP_WARN(this->get_logger(), "No valid gap found after sliding through all windows.");
+            return {0, 0};
+        }
+
+        size_t best_end_idx = best_start_idx + gap_window_size_ - 1;
+
+        RCLCPP_INFO(this->get_logger(), "Best window found from index %zu to %zu with maximum depth %.2f meters",
+                    best_start_idx, best_end_idx, best_window_max_depth);
+
+        return {best_start_idx, best_end_idx};
     }
-
-    if (!found_valid_window)
-    {
-        RCLCPP_WARN(this->get_logger(), "No valid gap found after sliding.");
-        return {0, 0};
-    }
-
-    size_t best_end_idx = best_start_idx + window_size - 1;
-
-    RCLCPP_DEBUG(this->get_logger(), "Best window found from index %zu to %zu with average depth %.2f meters",
-                 best_start_idx, best_end_idx, best_window_avg_depth);
-
-    return {best_start_idx, best_end_idx};
-}
 
 
 
