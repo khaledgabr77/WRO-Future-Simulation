@@ -83,9 +83,9 @@ def generate_launch_description():
     )
     # Static TF base_link -> mono_camera
     # .15 0 .25 0 0 1.5707
-    cam_x = 0.05
+    cam_x = 0.0 # 0.05
     cam_y = 0.0
-    cam_z = 0.15 
+    cam_z = 0.0 #0.15 
     cam_roll = radians(-90.0)
     cam_pitch = 0.0
     cam_yaw = radians(-90.0)
@@ -93,7 +93,8 @@ def generate_launch_description():
         package='tf2_ros',
         name='base2depth_tf_node',
         executable='static_transform_publisher',
-        arguments=[str(cam_x), str(cam_y), str(cam_z), str(cam_yaw), str(cam_pitch), str(cam_roll), 'base_link', 'camera_link'],
+        # arguments=[str(cam_x), str(cam_y), str(cam_z), str(cam_yaw), str(cam_pitch), str(cam_roll), 'base_link', 'camera_link'],
+        arguments=[str(cam_x), str(cam_y), str(cam_z), str(cam_yaw), str(cam_pitch), str(cam_roll), 'camera_link', 'optical_camera_link'],
         
     )
     return LaunchDescription([

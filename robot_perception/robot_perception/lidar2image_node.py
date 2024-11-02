@@ -10,6 +10,8 @@ import numpy as np
 
 from geometry_msgs.msg import PoseArray, Pose
 import tf_transformations
+import transforms3d
+
 
 class Lidar2ImageNode(Node):
 
@@ -26,13 +28,13 @@ class Lidar2ImageNode(Node):
         self.tf_listener_ = TransformListener(self.tf_buffer_, self)
 
         # Subscribers using message_filters
-        self.image_sub_ = Subscriber(self, Image, "/rgb_image")
+        self.image_sub_ = Subscriber(self, Image, "bgr_image")
         self.detections_sub_ = Subscriber(self, DetectionArray, "/yolo/detections")
         self.scan_sub_ = Subscriber(self, LaserScan, "/scan")
 
         # Synchronizer
         self.detection_image_scan_sync = ApproximateTimeSynchronizer(
-            [self.detections_sub_, self.image_sub_, self.scan_sub_], queue_size=10, slop=0.1)
+            [self.detections_sub_, self.image_sub_, self.scan_sub_], queue_size=100, slop=0.1)
         self.detection_image_scan_sync.registerCallback(self.detection_image_scan_callback)
 
         # Camera info subscriber
@@ -77,6 +79,7 @@ class Lidar2ImageNode(Node):
 
         if points_camera is None:
             # Transformation failed
+            self.get_logger().warn("Could not transform lidar points to camera")
             return
 
         # Project points onto image plane
@@ -89,6 +92,7 @@ class Lidar2ImageNode(Node):
         # Associate projected points with detections and estimate object positions
         pose_array_msg, labels = self.associate_points_with_detections(
             u, v, x_cam, y_cam, z_cam, indices, labels, detections_msg, image_msg)
+            
 
         # Publish the object positions
         self.object_positions_pub_.publish(pose_array_msg)
@@ -240,6 +244,42 @@ class Lidar2ImageNode(Node):
         points_camera = np.dot(rot_matrix, points_lidar.T).T + translation
 
         return points_camera
+    
+    # def transform_lidar_points_to_camera_frame(self, points_lidar, source_frame, target_frame, time_stamp):
+    #     """
+    #     Transform LiDAR points from source_frame to target_frame (e.g., camera frame).
+    #     """
+    #     try:
+    #         # Use the timestamp from the scan message for accurate transformation
+    #         transform = self.tf_buffer_.lookup_transform(
+    #             target_frame=target_frame,
+    #             source_frame=source_frame,
+    #             time=time_stamp,
+    #             timeout=rclpy.duration.Duration(seconds=1.0))
+    #     except TransformException as ex:
+    #         self.get_logger().warn(f'Could not transform {source_frame} to {target_frame}: {ex}')
+    #         return None
+
+    #     # Extract translation and rotation from the transform
+    #     translation = np.array([
+    #         transform.transform.translation.x,
+    #         transform.transform.translation.y,
+    #         transform.transform.translation.z
+    #     ])
+    #     rotation = np.array([
+    #         transform.transform.rotation.x,
+    #         transform.transform.rotation.y,
+    #         transform.transform.rotation.z,
+    #         transform.transform.rotation.w
+    #     ])
+
+    #     # Convert quaternion to rotation matrix using transforms3d
+    #     rot_matrix = transforms3d.quaternions.quat2mat(rotation)
+
+    #     # Apply transformation
+    #     points_camera = np.dot(rot_matrix, points_lidar.T).T + translation
+
+    #     return points_camera
 
     def project_points_to_image_plane(self, points_camera, fx, fy, cx, cy, image_msg, indices):
         """
@@ -256,8 +296,11 @@ class Lidar2ImageNode(Node):
         z_cam = z_cam[valid_indices]
         indices = indices[valid_indices]
 
+        
+
         u = (fx * x_cam / z_cam + cx).astype(int)
         v = (fy * y_cam / z_cam + cy).astype(int)
+        
 
         # Get image dimensions
         height, width = image_msg.height, image_msg.width

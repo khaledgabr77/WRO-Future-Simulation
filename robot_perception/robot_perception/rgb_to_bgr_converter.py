@@ -29,6 +29,7 @@ class RGBToBGRNode(Node):
             # Convert back to ROS Image message
             bgr_msg = self.bridge.cv2_to_imgmsg(bgr_image, encoding='bgr8')
             bgr_msg.header = msg.header  # Preserve the original header
+            bgr_msg.header.frame_id = 'optical_camera_link'
             # Publish the converted image
             self.publisher.publish(bgr_msg)
         else:
