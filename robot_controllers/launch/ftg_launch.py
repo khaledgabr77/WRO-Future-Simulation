@@ -12,10 +12,10 @@ def generate_launch_description():
             output='screen',
             parameters=[
                 {'wheel_base': 0.2255},
-                {'car_width': 0.2},
+                {'car_width': 0.15},
                 {'wheel_radius': 0.0365},
-                {'safety_radius': 0.04},
-                {'max_speed': 1.0},
+                {'safety_radius': 0.03},
+                {'max_speed': 0.6},
                 {'min_speed': 0.2},
                 {'max_range': 3.0},
                 {'field_of_view': 180.0},  # Set desired FOV in degrees
@@ -23,10 +23,10 @@ def generate_launch_description():
                 {'enable_corner_case': False},  # Set to False to disable
                 {'use_labeled_scan': True},
                 {'publish_speed': True},
-                {'discontinuity_threshold': 0.3},
+                {'discontinuity_threshold': 0.5},
                 {'safety_angle_degrees': 15.0},
-                {'obstacle_threshold': 0.5},
-                {'gap_window_size': 20},
+                {'max_sub_window_size': 20},
+                 {'sub_window_step': 1}
             ],
             remappings=[
             ('/scan', '/labeled_scan'),
