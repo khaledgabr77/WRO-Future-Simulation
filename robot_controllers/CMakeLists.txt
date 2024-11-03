@@ -39,9 +39,9 @@ install(TARGETS ftg_node
 )
 
 # Install Python node
-# install(PROGRAMS scripts/ftg_node.py
-#   DESTINATION lib/${PROJECT_NAME}
-# )
+install(PROGRAMS scripts/ftg_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 # # Install Python node
 # install(PROGRAMS scripts/local_map_avoidance.py
