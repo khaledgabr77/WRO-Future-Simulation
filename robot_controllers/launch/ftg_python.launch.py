@@ -19,7 +19,7 @@ def generate_launch_description():
                 {'min_speed': 0.2},
                 {'max_range': 3.0},
                 {'field_of_view': 180.0},  # Set desired FOV in degrees
-                {'enable_disparity_extender': False},  # Set to False to disable
+                {'enable_disparity_extender': True},  # Set to False to disable
                 {'enable_corner_case': False},  # Set to False to disable
                 {'use_labeled_scan': True},
                 {'publish_speed': True},
