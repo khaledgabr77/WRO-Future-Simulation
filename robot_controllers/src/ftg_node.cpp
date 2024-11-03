@@ -36,6 +36,7 @@ public:
         this->declare_parameter<double>("safety_angle_degrees", 15.0);
         this->declare_parameter<double>("obstacle_threshold", 0.2);
         this->declare_parameter<int>("gap_window_size", 5); // Adjust as needed
+        this->declare_parameter<int>("best_point_conv_size", 5);
 
 
         // Get parameters
@@ -62,6 +63,8 @@ public:
             RCLCPP_WARN(this->get_logger(), "gap_window_size parameter is ot positive (%d). Using default value of 5.", gap_window_size_);
             gap_window_size_ = static_cast<size_t>(5);
         }
+
+        best_point_conv_size_ = static_cast<size_t>(this->get_parameter("best_point_conv_size").as_int());
 
         // Initialize processed_scan_
         processed_scan_.header.frame_id = "laser_frame"; // Update as per your frame
@@ -120,6 +123,7 @@ private:
     double safety_angle_degrees_;
     double obstacle_threshold_;
     size_t gap_window_size_;
+    size_t best_point_conv_size_;
 
     // Processed LaserScan
     sensor_msgs::msg::LaserScan processed_scan_;
@@ -490,112 +494,210 @@ private:
         return true;
     }
 
+    // std::pair<size_t, size_t> findBestGap()
+    // {
+    //     size_t num_ranges = processed_scan_.ranges.size();
+    //     size_t best_start_idx = 0;
+    //     float best_window_max_depth = 0.0f;
+    //     bool found_valid_window = false;
+
+    //     // Calculate safety angle in terms of indices
+    //     double safety_angle_rad = safety_angle_degrees_ * M_PI / 180.0;
+    //     size_t safety_zone_indices = static_cast<size_t>(std::ceil(safety_angle_rad / processed_scan_.angle_increment));
+
+    //     // Slide the fixed-size window over the ranges
+    //     for (size_t start_idx = 0; start_idx <= num_ranges - gap_window_size_; ++start_idx)
+    //     {
+    //         size_t end_idx = start_idx + gap_window_size_ - 1;
+
+    //         bool window_valid = true;
+    //         float window_max_range = 0.0f;
+
+    //         // Check validity within the window
+    //         for (size_t i = start_idx; i <= end_idx; ++i)
+    //         {
+    //             float range = processed_scan_.ranges[i];
+    //             if (range <= 0.0f || std::isnan(range) || std::isinf(range))
+    //             {
+    //                 window_valid = false;
+    //                 break;
+    //             }
+
+    //             // Check for discontinuities
+    //             if (i > start_idx)
+    //             {
+    //                 float prev_range = processed_scan_.ranges[i - 1];
+    //                 float range_diff = std::abs(range - prev_range);
+    //                 if (range_diff > discontinuity_threshold_)
+    //                 {
+    //                     window_valid = false;
+    //                     break;
+    //                 }
+    //             }
+
+    //             // Update the maximum range within the window
+    //             if (range > window_max_range)
+    //             {
+    //                 window_max_range = range;
+    //             }
+    //         }
+
+    //         if (window_valid)
+    //         {
+    //             // Check safety zones
+    //             if (isWindowSafe(start_idx, end_idx, safety_zone_indices))
+    //             {
+    //                 // This window is valid, compare its maximum depth with the best one found
+    //                 if (!found_valid_window || window_max_range > best_window_max_depth)
+    //                 {
+    //                     best_start_idx = start_idx;
+    //                     best_window_max_depth = window_max_range;
+    //                     found_valid_window = true;
+    //                 }
+    //             }
+    //         }
+    //     }
+
+    //     if (!found_valid_window)
+    //     {
+    //         RCLCPP_WARN(this->get_logger(), "No valid gap found after sliding through all windows.");
+    //         return {0, 0};
+    //     }
+
+    //     size_t best_end_idx = best_start_idx + gap_window_size_ - 1;
+
+    //     RCLCPP_INFO(this->get_logger(), "Best window found from index %zu to %zu with maximum depth %.2f meters",
+    //                 best_start_idx, best_end_idx, best_window_max_depth);
+
+    //     return {best_start_idx, best_end_idx};
+    // }
+
+
+
+    // size_t findBestPoint(size_t start_idx, size_t end_idx)
+    // {
+    //     // Select the middle point of the gap for balanced steering
+    //     size_t best_point_idx = (start_idx + end_idx) / 2;
+    //     float range = processed_scan_.ranges[best_point_idx];
+
+    //     // Optionally, you can choose the point with the maximum range within the gap
+    //     /*
+    //     size_t best_point_idx = start_idx;
+    //     float max_range = processed_scan_.ranges[start_idx];
+
+    //     for (size_t i = start_idx; i <= end_idx; ++i)
+    //     {
+    //         if (processed_scan_.ranges[i] > max_range)
+    //         {
+    //             max_range = processed_scan_.ranges[i];
+    //             best_point_idx = i;
+    //         }
+    //     }
+    //     */
+
+    //     RCLCPP_DEBUG(this->get_logger(), "Best point in gap at index %zu with range %.2f", best_point_idx, range);
+    //     return best_point_idx;
+    // }
+
+        // Updated findBestGap function
     std::pair<size_t, size_t> findBestGap()
     {
-        size_t num_ranges = processed_scan_.ranges.size();
-        size_t best_start_idx = 0;
-        float best_window_max_depth = 0.0f;
-        bool found_valid_window = false;
+        const auto& ranges = processed_scan_.ranges;
+        size_t num_ranges = ranges.size();
 
-        // Calculate safety angle in terms of indices
-        double safety_angle_rad = safety_angle_degrees_ * M_PI / 180.0;
-        size_t safety_zone_indices = static_cast<size_t>(std::ceil(safety_angle_rad / processed_scan_.angle_increment));
+        size_t max_gap_length = 0;
+        size_t max_gap_start = 0;
+        size_t max_gap_end = 0;
 
-        // Slide the fixed-size window over the ranges
-        for (size_t start_idx = 0; start_idx <= num_ranges - gap_window_size_; ++start_idx)
+        size_t current_gap_start = 0;
+        size_t current_gap_length = 0;
+
+        for (size_t i = 0; i < num_ranges; ++i)
         {
-            size_t end_idx = start_idx + gap_window_size_ - 1;
-
-            bool window_valid = true;
-            float window_max_range = 0.0f;
-
-            // Check validity within the window
-            for (size_t i = start_idx; i <= end_idx; ++i)
+            if (ranges[i] > 0.0f && !std::isnan(ranges[i]) && !std::isinf(ranges[i]))
             {
-                float range = processed_scan_.ranges[i];
-                if (range <= 0.0f || std::isnan(range) || std::isinf(range))
+                if (current_gap_length == 0)
                 {
-                    window_valid = false;
-                    break;
+                    current_gap_start = i;
                 }
-
-                // Check for discontinuities
-                if (i > start_idx)
-                {
-                    float prev_range = processed_scan_.ranges[i - 1];
-                    float range_diff = std::abs(range - prev_range);
-                    if (range_diff > discontinuity_threshold_)
-                    {
-                        window_valid = false;
-                        break;
-                    }
-                }
-
-                // Update the maximum range within the window
-                if (range > window_max_range)
-                {
-                    window_max_range = range;
-                }
+                current_gap_length++;
             }
-
-            if (window_valid)
+            else
             {
-                // Check safety zones
-                if (isWindowSafe(start_idx, end_idx, safety_zone_indices))
+                if (current_gap_length > max_gap_length)
                 {
-                    // This window is valid, compare its maximum depth with the best one found
-                    if (!found_valid_window || window_max_range > best_window_max_depth)
-                    {
-                        best_start_idx = start_idx;
-                        best_window_max_depth = window_max_range;
-                        found_valid_window = true;
-                    }
+                    max_gap_length = current_gap_length;
+                    max_gap_start = current_gap_start;
+                    max_gap_end = i - 1;
                 }
+                current_gap_length = 0;
             }
         }
 
-        if (!found_valid_window)
+        // Check at the end of the loop
+        if (current_gap_length > max_gap_length)
         {
-            RCLCPP_WARN(this->get_logger(), "No valid gap found after sliding through all windows.");
+            max_gap_length = current_gap_length;
+            max_gap_start = current_gap_start;
+            max_gap_end = num_ranges - 1;
+        }
+
+        if (max_gap_length == 0)
+        {
+            RCLCPP_WARN(this->get_logger(), "No valid gap found (all ranges are zero or invalid).");
             return {0, 0};
         }
 
-        size_t best_end_idx = best_start_idx + gap_window_size_ - 1;
+        RCLCPP_DEBUG(this->get_logger(), "Best gap found from index %zu to %zu with length %zu", 
+                     max_gap_start, max_gap_end, max_gap_length);
 
-        RCLCPP_INFO(this->get_logger(), "Best window found from index %zu to %zu with maximum depth %.2f meters",
-                    best_start_idx, best_end_idx, best_window_max_depth);
-
-        return {best_start_idx, best_end_idx};
+        return {max_gap_start, max_gap_end};
     }
 
-
-
-
-
-
-
+    // Updated findBestPoint function
     size_t findBestPoint(size_t start_idx, size_t end_idx)
     {
-        // Select the middle point of the gap for balanced steering
-        size_t best_point_idx = (start_idx + end_idx) / 2;
-        float range = processed_scan_.ranges[best_point_idx];
+        const auto& ranges = processed_scan_.ranges;
+        size_t gap_size = end_idx - start_idx;
 
-        // Optionally, you can choose the point with the maximum range within the gap
-        /*
-        size_t best_point_idx = start_idx;
-        float max_range = processed_scan_.ranges[start_idx];
-
-        for (size_t i = start_idx; i <= end_idx; ++i)
+        if (gap_size == 0)
         {
-            if (processed_scan_.ranges[i] > max_range)
-            {
-                max_range = processed_scan_.ranges[i];
-                best_point_idx = i;
-            }
+            RCLCPP_WARN(this->get_logger(), "Gap size is zero. Selecting start index as best point.");
+            return start_idx;
         }
-        */
 
-        RCLCPP_DEBUG(this->get_logger(), "Best point in gap at index %zu with range %.2f", best_point_idx, range);
+        // Ensure window size does not exceed gap size
+        size_t effective_window_size = std::min(best_point_conv_size_, gap_size);
+
+        // Calculate sliding window averages
+        std::vector<float> averaged_max_gap(gap_size, 0.0f);
+
+        for (size_t i = 0; i < gap_size; ++i)
+        {
+            size_t window_start = (i >= effective_window_size / 2) ? (i - effective_window_size / 2) : 0;
+            size_t window_end = std::min(i + effective_window_size / 2, gap_size - 1);
+
+            float sum = 0.0f;
+            size_t count = 0;
+
+            for (size_t j = window_start; j <= window_end; ++j)
+            {
+                sum += ranges[start_idx + j];
+                count++;
+            }
+
+            averaged_max_gap[i] = sum / static_cast<float>(count);
+        }
+
+        // Find the index with the maximum average
+        auto max_iter = std::max_element(averaged_max_gap.begin(), averaged_max_gap.end());
+        size_t max_index = std::distance(averaged_max_gap.begin(), max_iter);
+
+        size_t best_point_idx = start_idx + max_index;
+
+        RCLCPP_DEBUG(this->get_logger(), "Best point in gap at index %zu with range %.2f meters",
+                     best_point_idx, ranges[best_point_idx]);
+
         return best_point_idx;
     }
 
