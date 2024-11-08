@@ -4,7 +4,6 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Adjusted Scan1/Status1
         - /Limited FoV Scan1/Topic1
       Splitter Ratio: 0.5
     Tree Height: 339
@@ -25,7 +24,7 @@ Panels:
     Experimental: false
     Name: Time
     SyncMode: 0
-    SyncSource: LaserScan
+    SyncSource: Raw Laser Scan
 Visualization Manager:
   Class: ""
   Displays:
@@ -104,7 +103,7 @@ Visualization Manager:
       Max Intensity: 0
       Min Color: 0; 0; 0
       Min Intensity: 0
-      Name: LaserScan
+      Name: Raw Laser Scan
       Position Transformer: XYZ
       Selectable: true
       Size (Pixels): 3
@@ -145,6 +144,8 @@ Visualization Manager:
           Value: true
         lidar_link:
           Value: true
+        optical_camera_link:
+          Value: true
         sensors:
           Value: false
       Marker Scale: 1
@@ -167,7 +168,8 @@ Visualization Manager:
           base_footprint:
             {}
           camera_link:
-            {}
+            optical_camera_link:
+              {}
           lidar_link:
             {}
           sensors:
@@ -212,7 +214,7 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /rgb_image
+        Value: /bgr_image
       Value: true
     - Class: rviz_default_plugins/Image
       Enabled: true
@@ -300,7 +302,7 @@ Visualization Manager:
       Color: 85; 255; 0
       Color Transformer: FlatColor
       Decay Time: 0
-      Enabled: true
+      Enabled: false
       Invert Rainbow: false
       Max Color: 255; 255; 255
       Max Intensity: 0
@@ -319,6 +321,40 @@ Visualization Manager:
         History Policy: Keep Last
         Reliability Policy: Reliable
         Value: /limited_fov_scan
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: false
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/LaserScan
+      Color: 255; 255; 255
+      Color Transformer: Intensity
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 2
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Name: Labeled Scan
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.009999999776482582
+      Style: Flat Squares
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /labeled_scan
       Use Fixed Frame: true
       Use rainbow: true
       Value: true
@@ -368,16 +404,16 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 8.463892936706543
+      Distance: 9.87437629699707
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.1991373747587204
-        Y: -2.204411268234253
-        Z: 0.23978522419929504
+        X: 0.46337276697158813
+        Y: -1.7632033824920654
+        Z: 0.21265652775764465
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
@@ -408,5 +444,5 @@ Window Geometry:
   Views:
     collapsed: true
   Width: 1561
-  X: 232
+  X: 128
   Y: -32
