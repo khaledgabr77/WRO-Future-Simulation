@@ -109,7 +109,7 @@ class Lidar2ImageNode(Node):
             class_id = detection.class_id
 
             # Process only red and green objects (assuming class IDs 0 and 1)
-            if class_id in [1, 2]:
+            if class_id in [1, 2,3]:
                 bbox = detection.bbox
                 image_width = image_msg.width
                 image_height = image_msg.height
@@ -134,6 +134,9 @@ class Lidar2ImageNode(Node):
                     color = (0, 255, 0)  # Green
                     label_text = "Green"
                 elif class_id == 2:
+                    color = (203, 192, 255) # parking gate color (pink)
+                    label_text = "Parking"
+                elif class_id == 3:
                     color = (0, 0, 255)  # Red
                     label_text = "Red"
                 else:
@@ -150,6 +153,8 @@ class Lidar2ImageNode(Node):
             if labels[i] == 1:
                 color = (0, 255, 0)  # Green
             elif labels[i] == 2:
+                    color = (203, 192, 255) # parking gate color (pink)
+            elif labels[i] == 3:
                     color = (0, 0, 255)  # red
             else:
                 # color = (255, 0, 0)  # Blue
@@ -329,7 +334,7 @@ class Lidar2ImageNode(Node):
             class_id = detection.class_id
 
             # Process only red and green objects (assuming class IDs 0 and 1)
-            if class_id in [1, 2]:
+            if class_id in [1, 2, 3]:
                 # Get bounding box coordinates
                 bbox = detection.bbox
                 image_width = image_msg.width

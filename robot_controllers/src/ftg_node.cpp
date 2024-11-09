@@ -325,10 +325,11 @@ private:
             float range = processed_scan_.ranges[i];
             float intensity = processed_scan_.intensities[i];
 
-            // Check if intensity is 1 or 2
-            int int_intensity = static_cast<int>(intensity + 0.5f); // Round to nearest int
+            // Check if intensity is 1 or 2 or 3
+            // label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
+            int int_intensity = static_cast<int>(intensity); // From float to int
 
-            if ((int_intensity == 1 || int_intensity == 2) && range > 0.0f)
+            if ((int_intensity == 1 || int_intensity == 2 || int_intensity == 3) && range > 0.0f)
             {
                 if (range < min_range)
                 {
@@ -345,6 +346,7 @@ private:
             RCLCPP_INFO(this->get_logger(), "Closest labeled object at index %zu, range %.2f, label %d", closest_idx, min_range, label);
 
             // Modify the ranges based on the label
+            // label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
             if (label == 1)
             {
                 // Green object: modify ranges on the right
@@ -353,7 +355,7 @@ private:
                     processed_scan_.ranges[i] = 0.0; //min_range;
                 }
             }
-            else if (label == 2)
+            else if (label == 3)
             {
                 // Red object: modify ranges on the left
                 for (size_t i = closest_idx + 1; i < processed_scan_.ranges.size(); ++i)
@@ -364,7 +366,7 @@ private:
         }
         else
         {
-            RCLCPP_DEBUG(this->get_logger(), "No labeled objects found in intensities.");
+            RCLCPP_DEBUG(this->get_logger(), "No valid labeled objects found in intensities.");
         }
     }
 

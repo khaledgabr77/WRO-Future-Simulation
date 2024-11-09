@@ -273,7 +273,8 @@ class FollowTheGap(Node):
         intensities = np.array(self.processed_scan_.intensities)
         int_intensities = intensities.astype(int)
 
-        mask = (int_intensities == 1) | (int_intensities == 2)
+        # label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
+        mask = (int_intensities == 1) | (int_intensities == 2)  | (int_intensities == 3) 
 
         masked_indices = np.where(mask)[0]
 
@@ -287,10 +288,11 @@ class FollowTheGap(Node):
             self.get_logger().info(f'Closest labeled object at index {closest_idx}, range {min_range:.2f}, label {label}')
 
             # Modify the ranges based on the label
+            # label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
             if label == 1:
                 # Green object: modify ranges on the right
                 ranges[:closest_idx] = 0.0
-            elif label == 2:
+            elif label == 3:
                 # Red object: modify ranges on the left
                 ranges[closest_idx + 1:] = 0.0
 
