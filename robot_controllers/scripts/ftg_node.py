@@ -19,6 +19,8 @@ class FollowTheGap(Node):
         # Initialize parameters
         self.declare_parameter('car_width', 0.5)
         self.declare_parameter('safety_radius', 0.2)
+        self.declare_parameter('bubble_safety_radius', 0.1)
+        self.declare_parameter('speed_safety_radius', 0.15)
         self.declare_parameter('max_speed', 2.0)
         self.declare_parameter('min_speed', 0.5)
         self.declare_parameter('max_range', 3.0)
@@ -59,10 +61,12 @@ class FollowTheGap(Node):
         self.sub_window_step_ = self.get_parameter('sub_window_step').value
         self.disparity_threshold_ = self.get_parameter('disparity_threshold').value
         self.emergency_stop_distance_ = self.get_parameter('emergency_stop_distance').value
+        self.bubble_safety_radius_ = self.get_parameter('bubble_safety_radius').value
+        self.speed_safety_radius_ = self.get_parameter('speed_safety_radius').value
 
         # Initialize processed_scan_
         self.processed_scan_ = LaserScan()
-        self.processed_scan_.header.frame_id = 'laser_frame'  # Update as per your frame
+        self.processed_scan_.header.frame_id = 'lidar_link'  # Update as per your frame
         self.processed_scan_.range_min = 0.0  # Will be set based on original scan
         self.processed_scan_.range_max = float(self.max_range_)
         # angle_min, angle_max, angle_increment, and ranges will be set in preprocessLidar
@@ -242,7 +246,7 @@ class FollowTheGap(Node):
 
         # Remove NaNs and infs, cap ranges at max_range_
         max_range = float(self.max_range_)
-        limited_ranges[np.isnan(limited_ranges) | np.isinf(limited_ranges)] = 0.0
+        limited_ranges[np.isnan(limited_ranges) | np.isinf(limited_ranges)] = max_range#0.0
         limited_ranges = np.minimum(limited_ranges, max_range)
 
         # Update processed_scan_
@@ -310,7 +314,7 @@ class FollowTheGap(Node):
             self.get_logger().warn('Closest index out of bounds. Skipping safety bubble.')
             return
 
-        theta = math.atan2(self.safety_radius_, ranges[closest_idx])
+        theta = math.atan2(self.bubble_safety_radius_, ranges[closest_idx])
 
         # Calculate the number of points to clear around the closest point
         bubble_size = int(theta / self.processed_scan_.angle_increment)
@@ -325,9 +329,11 @@ class FollowTheGap(Node):
 
         # Log the computed values
         self.get_logger().info(f'Bubble Size: {bubble_size}')
+        self.get_logger().info(f'Bubble theta (deg): {theta*180.0/math.pi}')
         self.get_logger().info(f'Closest Index: {closest_idx}')
-        self.get_logger().info(f'Start Index: {start_idx}')
-        self.get_logger().info(f'End Index: {end_idx}')
+        self.get_logger().info(f'Closest range: {ranges[closest_idx]}')
+        self.get_logger().info(f'Bubble Start Index: {start_idx}')
+        self.get_logger().info(f'Bubble End Index: {end_idx}')
 
     def applyDisparityExtender(self):
         ranges = np.array(self.processed_scan_.ranges)
@@ -438,7 +444,7 @@ class FollowTheGap(Node):
 
         # if min_range > (self.safety_radius_ * 2):
         speed = float(self.min_speed_ + (self.max_speed_ - self.min_speed_) * (
-                    (min_range - self.safety_radius_) / (self.max_range_ - self.safety_radius_)))
+                    (min_range - self.speed_safety_radius_) / (self.max_range_ - self.speed_safety_radius_)))
         speed = min(speed, float(self.max_speed_))
         # else:
         #     speed = 0.0  # Stop if obstacle is too close

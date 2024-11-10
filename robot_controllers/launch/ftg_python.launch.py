@@ -11,17 +11,19 @@ def generate_launch_description():
             name='ftg_node',
             output='screen',
             parameters=[
-                {'wheel_base': 0.2255},
-                {'car_width': 0.2},
-                {'wheel_radius': 0.0365},
+                {'wheel_base': 0.165},
+                {'car_width': 0.127},
+                {'wheel_radius': 0.025},
                 {'safety_radius': 0.15},
-                {'max_speed': 0.5},
-                {'min_speed': 0.2},
+                {'bubble_safety_radius': 0.0635},
+                {'speed_safety_radius': 0.15},
+                {'max_speed': 0.4},
+                {'min_speed': 0.1},
                 {'max_range': 3.0},
                 {'field_of_view': 180.0},  # Set desired FOV in degrees
                 {'enable_disparity_extender': True},  # Set to False to disable
                 {'enable_corner_case': False},  # Set to False to disable
-                {'use_labeled_scan': True},
+                {'use_labeled_scan': False},
                 {'publish_speed': True},
                 {'discontinuity_threshold': 0.5},
                 {'safety_angle_degrees': 15.0}, # Not used
