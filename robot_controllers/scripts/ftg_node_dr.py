@@ -10,7 +10,6 @@ import numpy as np
 import math
 import tf_transformations
 import time
-from scipy.ndimage import median_filter  # For optional noise filtering
 
 
 class FollowTheGap(Node):
@@ -35,12 +34,13 @@ class FollowTheGap(Node):
         self.declare_parameter('use_labeled_scan', True)
         self.declare_parameter('publish_speed', True)
         self.declare_parameter('discontinuity_threshold', 0.3)  # Adjust as needed
-        self.declare_parameter('safety_angle_degrees', 15.0)
         self.declare_parameter('best_point_conv_size', 5)
-        self.declare_parameter('max_sub_window_size', 10)  # Default: 10 points
-        self.declare_parameter('sub_window_step', 1)  # Default: 1 point
         self.declare_parameter('disparity_threshold', 1.0)
         self.declare_parameter('emergency_stop_distance', 0.2)
+        self.declare_parameter('sliding_window_size', 5)
+        self.declare_parameter('gap_edge_safety_dist', 0.5)
+        
+        
 
         # Get parameters
         self.car_width_ = self.get_parameter('car_width').value
@@ -56,18 +56,20 @@ class FollowTheGap(Node):
         self.use_labeled_scan_ = self.get_parameter('use_labeled_scan').value
         self.publish_speed_ = self.get_parameter('publish_speed').value
         self.discontinuity_threshold_ = self.get_parameter('discontinuity_threshold').value
-        self.safety_angle_degrees_ = self.get_parameter('safety_angle_degrees').value
         self.best_point_conv_size_ = self.get_parameter('best_point_conv_size').value
-        self.max_sub_window_size_ = self.get_parameter('max_sub_window_size').value
-        self.sub_window_step_ = self.get_parameter('sub_window_step').value
         self.disparity_threshold_ = self.get_parameter('disparity_threshold').value
         self.emergency_stop_distance_ = self.get_parameter('emergency_stop_distance').value
         self.bubble_safety_radius_ = self.get_parameter('bubble_safety_radius').value
         self.speed_safety_radius_ = self.get_parameter('speed_safety_radius').value
+        self.sliding_window_size_ = self.get_parameter('sliding_window_size').value
+        self.gap_edge_safety_dist_ = self.get_parameter('gap_edge_safety_dist').value
 
         # Initialize processed_scan_
         self.processed_scan_ = LaserScan()
-        # Removed hardcoded frame_id; it will be set dynamically
+        self.processed_scan_.header.frame_id = 'lidar_link'  # Update as per your frame
+        self.processed_scan_.range_min = 0.0  # Will be set based on original scan
+        self.processed_scan_.range_max = float(self.max_range_)
+        # angle_min, angle_max, angle_increment, and ranges will be set in preprocessLidar
 
         # Subscribers and Publishers
         self.scan_sub_ = self.create_subscription(
@@ -96,9 +98,6 @@ class FollowTheGap(Node):
         # Publisher for best gap points
         self.best_gap_points_pub_ = self.create_publisher(Marker, '/best_gap_points', 10)
 
-        # Publisher for best point marker
-        self.best_point_marker_pub_ = self.create_publisher(Marker, '/best_point_marker', 10)
-
         # Previous steering angle for smoothing (not used in the given code)
         self.previous_steering_angle_ = 0.0
 
@@ -110,93 +109,84 @@ class FollowTheGap(Node):
         # Start timing
         start_time = time.time()
 
-        try:
-            # 0- Emergency STOP
-            # Emergency stop check before processing
-            if self.isEmergencyStop(scan_msg):
-                self.publishDriveCommand(0.0, 0.0)
-                self.get_logger().warn('Emergency stop activated. Robot stopped.')
-                return
-
-            # Step 1: Preprocess the LiDAR data and limit the field of view
-            self.get_logger().debug('Step 1: Preprocessing LiDAR data')
-            self.preprocessLidar(scan_msg)
-
-            # Publish the scan with limited FOV
-            self.publishLimitedFOVScan()
-
-            # Step 2: Apply safety bubble
-            self.get_logger().debug('Step 2: Applying safety bubble')
-            self.applySafetyBubble()
-
-            if self.use_labeled_scan_:
-                # Process the intensities to adjust ranges based on object classes
-                self.get_logger().debug('Processing intensities for labeled objects')
-                self.processIntensities()
-            else:
-                self.get_logger().debug('Skipping intensity processing as labeled scan is disabled.')
-
-            # Step 3: Optionally apply disparity extender
-            if self.enable_disparity_extender_:
-                self.get_logger().debug('Step 3: Applying disparity extender')
-                self.applyDisparityExtender()
-
-            # Publish the adjusted LiDAR scan after all processing
-            self.publishAdjustedScan()
-
-            # Step 4: Find the deepest valid gap that satisfies width constraint
-            self.get_logger().debug('Step 4: Finding deepest valid gap that satisfies width constraint')
-            gap = self.findBestGap()
-
-            # Publish the best gap points
-            self.publishBestGapPoints(gap[0], gap[1], scan_msg.header)
-
-            # Step 5: Check if no valid gap is found
-            if gap[0] == gap[1]:
-                self.get_logger().warn('No valid gap found. Stopping the robot.')
-                # Publish zero velocity command
-                self.publishDriveCommand(0.0, 0.0)
-                # Publish visualization marker
-                self.publishMarker(0.0, scan_msg.header)
-
-                # End timing
-                end_time = time.time()
-                duration = end_time - start_time
-                self.get_logger().info(f'Execution Time: {duration:.6f} seconds')
-
-                return
-
-            # Step 6: Find the best point in the gap
-            self.get_logger().debug('Step 6: Finding best point in the gap')
-            best_point_idx = self.findBestPoint(gap[0], gap[1])
-
-            # Step 7: Compute steering angle and speed
-            self.get_logger().debug('Step 7: Computing steering angle and speed')
-            steering_angle = self.calculateSteeringAngle(best_point_idx)
-            speed = self.computeSpeed(scan_msg)
-
-            self.get_logger().info(f'Steering Angle: {steering_angle:.3f} radians, Speed: {speed:.3f} m/s')
-
-            # Step 8: Publish drive command
-            if self.publish_speed_:
-                self.get_logger().debug('Step 8: Publishing drive command')
-                self.publishDriveCommand(steering_angle, speed)
-
-            # Publish visualization markers
-            self.publishMarker(steering_angle, scan_msg.header)
-            self.publishBestPointMarker(best_point_idx, scan_msg.header)
-
-        except Exception as e:
-            self.get_logger().error(f'Error in scan processing: {e}')
-            # Optionally, stop the robot
+        # 0- Emergency STOP
+        # Emergency stop check before processing
+        if self.isEmergencyStop(scan_msg):
             self.publishDriveCommand(0.0, 0.0)
+            self.get_logger().warn('Emergency stop activated. Robot stopped.')
             return
+
+        # Step 1: Preprocess the LiDAR data and limit the field of view
+        self.get_logger().debug('Step 1: Preprocessing LiDAR data')
+        self.preprocessLidar(scan_msg)
+
+        # Publish the scan with limited FOV
+        self.publishLimitedFOVScan()
+
+        # Step 2: Apply safety bubble
+        self.get_logger().debug('Step 2: Applying safety bubble')
+        self.applySafetyBubble()
+
+        if self.use_labeled_scan_:
+            # Process the intensities to adjust ranges based on object classes
+            self.get_logger().debug('Processing intensities for labeled objects')
+            self.processIntensities()
+
+        # Step 3: Optionally apply disparity extender
+        if self.enable_disparity_extender_:
+            self.get_logger().debug('Step 3: Applying disparity extender')
+            self.applyDisparityExtender()
+
+        # Publish the adjusted LiDAR scan after all processing
+        self.publishAdjustedScan()
+
+        # Step 4: Find the deepest valid gap that satisfies width constraint
+        self.get_logger().debug('Step 4: Finding deepest valid gap that satisfies width constraint')
+        gap = self.findBestGap()
+
+        # Publish the best gap points
+        self.publishBestGapPoints(gap[0], gap[1], scan_msg.header)
+
+        # Step 5: Check if no valid gap is found
+        if gap[0] == 0 and gap[1] == 0:
+            self.get_logger().warn('No valid gap found. Stopping the robot.')
+            # Publish zero velocity command
+            self.publishDriveCommand(0.0, 0.0)
+            # Publish visualization marker
+            self.publishMarker(0.0, scan_msg.header)
+
+            # End timing
+            end_time = time.time()
+            duration = end_time - start_time
+            self.get_logger().info(f'Execution Time: {duration:.6f} seconds')
+
+            return
+
+        # Step 6: Find the best point in the gap
+        self.get_logger().debug('Step 6: Finding best point in the gap')
+        best_point_idx = self.findBestPoint(gap[0], gap[1])
+
+        # Step 7: Compute steering angle and speed
+        self.get_logger().debug('Step 7: Computing steering angle and speed')
+        steering_angle = self.calculateSteeringAngle(best_point_idx)
+        speed = self.computeSpeed(scan_msg)
+
+        self.get_logger().info(f'Steering Angle: {steering_angle:.3f} radians, Speed: {speed:.3f} m/s')
+
+        # Step 8: Publish drive command
+        if self.publish_speed_:
+            self.get_logger().debug('Step 8: Publishing drive command')
+            self.publishDriveCommand(steering_angle, speed)
+
+        # Publish visualization marker
+        self.publishMarker(steering_angle, scan_msg.header)
 
         # End timing
         end_time_final = time.time()
         duration_final = end_time_final - start_time
         self.get_logger().info(f'Execution Time: {duration_final:.6f} seconds')
 
+    
     def isEmergencyStop(self, scan_msg):
         ranges = np.array(scan_msg.ranges)
         ranges = ranges[~np.isnan(ranges) & ~np.isinf(ranges)]  # Remove NaNs and Infs
@@ -254,14 +244,10 @@ class FollowTheGap(Node):
             # If intensities are not available or not matching ranges size, fill with zeros
             limited_intensities = np.zeros_like(limited_ranges)
 
-        # Remove NaNs, Infs, and zeros, cap ranges at max_range_
+        # Remove NaNs and infs, cap ranges at max_range_
         max_range = float(self.max_range_)
-        invalid_mask = np.isnan(limited_ranges) | np.isinf(limited_ranges) | (limited_ranges == 0.0)
-        limited_ranges[invalid_mask] = max_range
+        limited_ranges[np.isnan(limited_ranges) | np.isinf(limited_ranges)] = max_range#0.0
         limited_ranges = np.minimum(limited_ranges, max_range)
-
-        # Apply median filter to smooth out noise (optional)
-        limited_ranges = median_filter(limited_ranges, size=3)
 
         # Update processed_scan_
         self.processed_scan_.header = scan_msg.header
@@ -292,7 +278,7 @@ class FollowTheGap(Node):
         int_intensities = intensities.astype(int)
 
         # label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
-        mask = (int_intensities == 1) | (int_intensities == 2) | (int_intensities == 3)
+        mask = (int_intensities == 1) | (int_intensities == 2)  | (int_intensities == 3) 
 
         masked_indices = np.where(mask)[0]
 
@@ -306,6 +292,7 @@ class FollowTheGap(Node):
             self.get_logger().info(f'Closest labeled object at index {closest_idx}, range {min_range:.2f}, label {label}')
 
             # Modify the ranges based on the label
+            # label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
             if label == 1:
                 # Green object: modify ranges on the right
                 ranges[:closest_idx] = 0.0
@@ -327,10 +314,6 @@ class FollowTheGap(Node):
             self.get_logger().warn('Closest index out of bounds. Skipping safety bubble.')
             return
 
-        if ranges[closest_idx] <= 0.0:
-            self.get_logger().warn('Closest range is zero or invalid. Skipping safety bubble.')
-            return
-
         theta = math.atan2(self.bubble_safety_radius_, ranges[closest_idx])
 
         # Calculate the number of points to clear around the closest point
@@ -345,12 +328,12 @@ class FollowTheGap(Node):
         self.processed_scan_.ranges = ranges.tolist()
 
         # Log the computed values
-        self.get_logger().debug(f'Bubble Size: {bubble_size}')
-        self.get_logger().debug(f'Bubble theta (deg): {theta*180.0/math.pi}')
-        self.get_logger().debug(f'Closest Index: {closest_idx}')
-        self.get_logger().debug(f'Closest range: {ranges[closest_idx]}')
-        self.get_logger().debug(f'Bubble Start Index: {start_idx}')
-        self.get_logger().debug(f'Bubble End Index: {end_idx}')
+        self.get_logger().info(f'Bubble Size: {bubble_size}')
+        self.get_logger().info(f'Bubble theta (deg): {theta*180.0/math.pi}')
+        self.get_logger().info(f'Closest Index: {closest_idx}')
+        self.get_logger().info(f'Closest range: {ranges[closest_idx]}')
+        self.get_logger().info(f'Bubble Start Index: {start_idx}')
+        self.get_logger().info(f'Bubble End Index: {end_idx}')
 
     def applyDisparityExtender(self):
         ranges = np.array(self.processed_scan_.ranges)
@@ -371,10 +354,8 @@ class FollowTheGap(Node):
 
         for i in indices:
             min_range = min(r1[i], r2[i])
-            if min_range <= 0.0:
-                continue  # Skip invalid ranges
-
             theta = math.atan2(car_half_width, min_range)
+            # theta = math.atan2(self.car_width_, min_range)
             num_points = int(theta / angle_increment)
 
             if r1[i] < r2[i]:
@@ -391,53 +372,196 @@ class FollowTheGap(Node):
 
         self.processed_scan_.ranges = ranges.tolist()
 
+    # def findBestGap(self):
+    #     ranges = np.array(self.processed_scan_.ranges)
+    #     num_ranges = len(ranges)
+
+    #     valid = (ranges > 0.0) & ~np.isnan(ranges) & ~np.isinf(ranges)
+    #     valid = valid.astype(int)
+
+    #     diffs = np.diff(valid)
+
+    #     start_indices = np.where(diffs == 1)[0] + 1
+    #     end_indices = np.where(diffs == -1)[0]
+
+    #     if valid[0]:
+    #         start_indices = np.insert(start_indices, 0, 0)
+    #     if valid[-1]:
+    #         end_indices = np.append(end_indices, num_ranges - 1)
+
+    #     if len(start_indices) == 0 or len(end_indices) == 0:
+    #         self.get_logger().warn('No valid gap found (all ranges are zero or invalid).')
+    #         return (0, 0)
+
+    #     gap_lengths = end_indices - start_indices + 1
+
+    #     max_gap_idx = np.argmax(gap_lengths)
+    #     max_gap_start = start_indices[max_gap_idx]
+    #     max_gap_end = end_indices[max_gap_idx]
+    #     max_gap_length = gap_lengths[max_gap_idx]
+
+    #     self.get_logger().debug(f'Best gap found from index {max_gap_start} to {max_gap_end} with length {max_gap_length}')
+
+    #     return (max_gap_start, max_gap_end)
+
+    # def findBestGap(self):
+    #     """ Return the start index & end index of the max gap in free_space_ranges
+    #         free_space_ranges: list of LiDAR data which contains a 'bubble' of zeros
+    #     """
+    #     free_space_ranges = np.array(self.processed_scan_.ranges)
+    #     # Mask the zeros (bubble)
+    #     masked = np.ma.masked_where(free_space_ranges == 0, free_space_ranges)
+    #     # Get slices for each contiguous sequence of non-zero data
+    #     slices = np.ma.notmasked_contiguous(masked)
+
+    #     # Check if any valid slices are found
+    #     if not slices:
+    #         self.get_logger().warn('No valid gaps found.')
+    #         return 0, 0  # Or handle appropriately
+
+    #     # Initialize with the first slice
+    #     max_len = slices[0].stop - slices[0].start
+    #     chosen_slice = slices[0]
+
+    #     # Iterate over slices to find the one with the maximum length
+    #     for sl in slices[1:]:
+    #         sl_len = sl.stop - sl.start
+    #         if sl_len > max_len:
+    #             max_len = sl_len
+    #             chosen_slice = sl
+
+    #     # Adjust the stop index to prevent index out of bounds
+    #     start_idx = chosen_slice.start
+    #     end_idx = chosen_slice.stop - 1  # Subtract 1 to get the last valid index
+
+    #     # Ensure end_idx is within the valid range
+    #     end_idx = min(end_idx, len(free_space_ranges) - 1)
+
+    #     return start_idx, end_idx
+
+
     def findBestGap(self):
         ranges = np.array(self.processed_scan_.ranges)
-        num_ranges = len(ranges)
+        discontinuity_threshold = float(self.discontinuity_threshold_)
+        min_gap_width = 5  # Adjust as needed or use a parameter
 
-        valid = (ranges > 0.0) & ~np.isnan(ranges) & ~np.isinf(ranges)
-        valid = valid.astype(int)
+        safety_distance = float(self.gap_edge_safety_dist_)  # Define a safety distance
 
-        diffs = np.diff(valid)
+        gaps = []
+        in_gap = False
+        current_gap_start = None
 
-        start_indices = np.where(diffs == 1)[0] + 1
-        end_indices = np.where(diffs == -1)[0]
+        # Logging the start of gap detection
+        self.get_logger().debug(f'Starting gap detection with discontinuity_threshold: {discontinuity_threshold}')
 
-        if valid[0]:
-            start_indices = np.insert(start_indices, 0, 0)
-        if valid[-1]:
-            end_indices = np.append(end_indices, num_ranges - 1)
+        for i in range(len(ranges)):
+            range_i = ranges[i]
 
-        if len(start_indices) == 0 or len(end_indices) == 0:
-            self.get_logger().warn('No valid gaps detected. Continuing with cautious parameters.')
-            center_idx = num_ranges // 2
-            return (center_idx, center_idx)
+            # Ignore zero or invalid ranges
+            if range_i <= 0.0 or np.isnan(range_i) or np.isinf(range_i):
+                if in_gap:
+                    # Close the current gap
+                    gaps.append((current_gap_start, i - 1))
+                    self.get_logger().debug(f'Closed gap from {current_gap_start} to {i - 1} due to invalid range at index {i}')
+                    in_gap = False
+                    current_gap_start = None
+                continue  # Skip to the next index
 
-        gap_lengths = end_indices - start_indices + 1
+            if not in_gap:
+                # Start a new gap
+                in_gap = True
+                current_gap_start = i
+                self.get_logger().debug(f'Started new gap at index {i}')
+            else:
+                # Check for discontinuity
+                range_prev = ranges[i - 1]
+                if range_prev <= 0.0 or np.isnan(range_prev) or np.isinf(range_prev):
+                    # Previous range is invalid; cannot compute discontinuity
+                    self.get_logger().debug(f'Previous range at index {i-1} is invalid. Continuing current gap.')
+                    continue
 
-        # Select the gap closest to the center if multiple gaps have the same length
-        max_gap_length = np.max(gap_lengths)
-        candidates = np.where(gap_lengths == max_gap_length)[0]
+                range_diff = abs(range_i - range_prev)
+                if range_diff > discontinuity_threshold:
+                    # Discontinuity detected; close current gap and start a new one
+                    gaps.append((current_gap_start, i - 1))
+                    self.get_logger().debug(f'Closed gap from {current_gap_start} to {i - 1} due to discontinuity of {range_diff:.2f} at index {i}')
+                    # Start a new gap
+                    current_gap_start = i
 
-        if len(candidates) > 1:
-            center_idx = num_ranges // 2
-            min_distance = num_ranges
-            for idx in candidates:
-                gap_center = (start_indices[idx] + end_indices[idx]) // 2
-                distance = abs(gap_center - center_idx)
-                if distance < min_distance:
-                    min_distance = distance
-                    max_gap_idx = idx
-        else:
-            max_gap_idx = np.argmax(gap_lengths)
+        # After loop, close any remaining gap
+        if in_gap:
+            gaps.append((current_gap_start, len(ranges) - 1))
+            self.get_logger().debug(f'Closed final gap from {current_gap_start} to {len(ranges) - 1}')
 
-        max_gap_start = start_indices[max_gap_idx]
-        max_gap_end = end_indices[max_gap_idx]
-        max_gap_length = gap_lengths[max_gap_idx]
+        # Check if any gaps were found
+        if not gaps:
+            self.get_logger().warn('No valid gaps found.')
+            return (0, 0)
 
-        self.get_logger().debug(f'Best gap found from index {max_gap_start} to {max_gap_end} with length {max_gap_length}')
+        # Log all detected gaps
+        self.get_logger().debug(f'Detected gaps: {gaps}')
 
-        return (max_gap_start, max_gap_end)
+        # Adjust gap boundaries to avoid close obstacles near the robot
+        adjusted_gaps = []
+        for gap in gaps:
+            start_idx, end_idx = gap
+
+            # Adjust start_idx inward if obstacle near left boundary is too close
+            while start_idx < end_idx:
+                left_adjacent_idx = start_idx - 1 if start_idx > 0 else None
+                if left_adjacent_idx is not None and ranges[left_adjacent_idx] < safety_distance:
+                    start_idx += 1  # Narrow the gap inward
+                else:
+                    break
+
+            # Adjust end_idx inward if obstacle near right boundary is too close
+            while end_idx > start_idx:
+                right_adjacent_idx = end_idx + 1 if end_idx < len(ranges) - 1 else None
+                if right_adjacent_idx is not None and ranges[right_adjacent_idx] < safety_distance:
+                    end_idx -= 1  # Narrow the gap inward
+                else:
+                    break
+
+            # Only consider gaps that are still valid after adjustment
+            if end_idx - start_idx + 1 >= min_gap_width:
+                adjusted_gaps.append((start_idx, end_idx))
+                self.get_logger().info(f'Adjusted gap from {gap[0]}-{gap[1]} to {start_idx}-{end_idx}')
+            else:
+                self.get_logger().info(f'Gap from {gap[0]}-{gap[1]} is too narrow after adjustment and will be discarded')
+
+        # Check if any adjusted gaps remain
+        if not adjusted_gaps:
+            self.get_logger().warn('No valid gaps found after adjustment.')
+            return (0, 0)
+
+        # Collect adjusted gaps with their depths and widths
+        gaps_with_properties = []
+        for gap in adjusted_gaps:
+            start_idx, end_idx = gap
+            gap_ranges = ranges[start_idx:end_idx + 1]
+            min_range_in_gap = np.min(gap_ranges)
+            gap_width = end_idx - start_idx + 1
+            gaps_with_properties.append({
+                'depth': min_range_in_gap,
+                'width': gap_width,
+                'start_idx': start_idx,
+                'end_idx': end_idx
+            })
+            self.get_logger().info(f'Adjusted gap from {start_idx} to {end_idx} has min range {min_range_in_gap:.2f} and width {gap_width}')
+
+        # Sort adjusted gaps by depth in descending order
+        sorted_gaps = sorted(gaps_with_properties, key=lambda x: x['depth'], reverse=True)
+
+        # Select the deepest adjusted gap
+        for gap in sorted_gaps:
+            self.get_logger().info(f'Considering gap from index {gap["start_idx"]} to {gap["end_idx"]}, depth: {gap["depth"]:.2f} meters, width: {gap["width"]}')
+            return gap['start_idx'], gap['end_idx']
+
+        # If no gap meets the criteria
+        self.get_logger().warn('No valid gap found after sorting.')
+        return (0, 0)
+
+
 
     def findBestPoint(self, start_idx, end_idx):
         # Apply convolution to stabilize the best point selection
@@ -448,17 +572,20 @@ class FollowTheGap(Node):
             self.get_logger().warn('Gap size is zero. Selecting start index as best point.')
             return start_idx
 
-        # Ensure window size does not exceed gap size
-        effective_window_size = min(self.best_point_conv_size_, gap_size)
+        # # Ensure window size does not exceed gap size
+        # effective_window_size = min(self.best_point_conv_size_, gap_size)
 
-        averaged_max_gap = np.convolve(ranges[start_idx:end_idx + 1], np.ones(effective_window_size),
-                                       'same') / effective_window_size
-        best_point_in_gap = averaged_max_gap.argmax()
-        best_point_idx = best_point_in_gap + start_idx
+        # averaged_max_gap = np.convolve(ranges[start_idx:end_idx], np.ones(effective_window_size),
+        #                                'same') / effective_window_size
+        # best_point_idx = averaged_max_gap.argmax() + start_idx
+        # self.get_logger().debug(f'Best point in gap at index {best_point_idx} with range {ranges[best_point_idx]:.2f} meters')
 
-        self.get_logger().debug(f'Best point in gap at index {best_point_idx} with range {ranges[best_point_idx]:.2f} meters')
+        # return best_point_idx
 
+        best_point_idx = int((start_idx + end_idx)/2)
+        # best_point_idx = ranges[start_idx:end_idx].argmax() + start_idx
         return best_point_idx
+
 
     def computeSpeed(self, scan_msg):
         # Compute speed based on minimum distance to obstacles in front
@@ -478,29 +605,21 @@ class FollowTheGap(Node):
         else:
             min_range = float(self.max_range_)
 
-        denominator = self.max_range_ - self.speed_safety_radius_
-        if denominator <= 0.0:
-            self.get_logger().warn('Invalid speed computation parameters. Using min_speed.')
-            return self.min_speed_
+        speed = float(self.min_speed_)
 
-        speed = self.min_speed_ + (self.max_speed_ - self.min_speed_) * (
-            (min_range - self.speed_safety_radius_) / denominator)
-        speed = max(self.min_speed_, min(speed, self.max_speed_))
+        # if min_range > (self.safety_radius_ * 2):
+        speed = float(self.min_speed_ + (self.max_speed_ - self.min_speed_) * (
+                    (min_range - self.speed_safety_radius_) / (self.max_range_ - self.speed_safety_radius_)))
+        speed = min(speed, float(self.max_speed_))
+        # else:
+        #     speed = 0.0  # Stop if obstacle is too close
 
         return speed
 
     def calculateSteeringAngle(self, best_point_idx):
-        angle_increment = self.processed_scan_.angle_increment
-        angle_min = self.processed_scan_.angle_min
-
-        steering_angle = angle_min + (best_point_idx * angle_increment)
-
-        self.get_logger().debug(f'Calculated steering angle: {steering_angle:.3f} radians')
-        self.get_logger().debug(f'angle_min: {angle_min:.3f}')
-        self.get_logger().debug(f'angle_increment: {angle_increment:.6f}')
-        self.get_logger().debug(f'Best point index: {best_point_idx}')
-
-        return steering_angle
+        # Calculate steering angle based on the best point index
+        angle = (float(best_point_idx) - (len(self.processed_scan_.ranges) / 2.0)) * self.processed_scan_.angle_increment
+        return angle
 
     def publishDriveCommand(self, steering_angle, speed):
         # Publish steer angle and wheel speed
@@ -527,16 +646,11 @@ class FollowTheGap(Node):
         # Convert steering angle and speed to angular velocity for Twist message
         # Using the bicycle model: angular_velocity = speed * tan(steering_angle) / wheel_base
 
-        if self.wheel_base_ != 0.0:
+        angular_velocity = 0.0
+        if abs(steering_angle) > 0.001:
             angular_velocity = speed * math.tan(steering_angle) / float(self.wheel_base_)
         else:
-            self.get_logger().error('Wheel base is zero. Cannot compute angular velocity.')
             angular_velocity = 0.0
-
-        # Invert the angular velocity sign if necessary (uncomment if needed)
-        # angular_velocity = -angular_velocity
-
-        self.get_logger().debug(f'Computed angular velocity: {angular_velocity:.3f} rad/s')
 
         return angular_velocity
 
@@ -576,44 +690,6 @@ class FollowTheGap(Node):
         marker.header.frame_id = header.frame_id
 
         self.marker_pub_.publish(marker)
-
-    def publishBestPointMarker(self, best_point_idx, header):
-        # Publish a marker to visualize the best point
-        marker = Marker()
-        marker.header = header
-        marker.ns = 'best_point'
-        marker.id = 1
-        marker.type = Marker.SPHERE
-        marker.action = Marker.ADD
-
-        ranges = np.array(self.processed_scan_.ranges)
-        angles = self.processed_scan_.angle_min + np.arange(len(ranges)) * self.processed_scan_.angle_increment
-
-        if ranges[best_point_idx] > 0.0:
-            p = Point()
-            p.x = ranges[best_point_idx] * math.cos(angles[best_point_idx])
-            p.y = ranges[best_point_idx] * math.sin(angles[best_point_idx])
-            p.z = 0.0
-            marker.pose.position = p
-        else:
-            self.get_logger().warn('Best point range is invalid. Cannot visualize.')
-            return  # Skip publishing marker if range is invalid
-
-        # Set the scale of the marker
-        marker.scale.x = 0.1
-        marker.scale.y = 0.1
-        marker.scale.z = 0.1
-
-        # Set the color
-        marker.color.a = 1.0
-        marker.color.r = 0.0
-        marker.color.g = 0.0
-        marker.color.b = 1.0
-
-        # Frame ID
-        marker.header.frame_id = header.frame_id
-
-        self.best_point_marker_pub_.publish(marker)
 
     def publishLimitedFOVScan(self):
         # Create a new LaserScan message from processed_scan_
