@@ -20,14 +20,15 @@ def generate_launch_description():
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
                 FindPackageShare('yolov8_bringup'),
-                'launch/yolov11.launch.py'
+                'launch/yolov8.launch.py'
             ])
         ]),
         launch_arguments={
-            'model': '/home/user/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.mix.yolov11n.seg.pt',
+            'model': '/home/d2d/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.mix.yolov11n.seg.engine',
             'threshold' : '0.5',
             'input_image_topic' : '/bgr_image',
             'device': 'cuda:0',
+            'task': 'segment'
         }.items()
     )
 

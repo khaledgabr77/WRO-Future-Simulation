@@ -96,7 +96,7 @@ def generate_launch_description():
     # Path to the car_controller launch file
     car_controller_launch_path = os.path.join(
         get_package_share_directory('wro_firmware'),
-        'launch',
+        # 'launch',
         'car_controller.launch.py'  
     )
 
