@@ -283,7 +283,47 @@
         </material>
       </visual>
 
+      <collision name='parking_link_collision'>
+        <pose>-0.756 -2.0 0.786 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.2 0.02 0.1</size> <!-- Dimensions: length=200mm, width=20mm, height=100mm -->
+          </box>
+        </geometry>
+      </collision>
+      <visual name='parking_link_visual'>
+        <pose>-0.756 -2.0 0.786 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.2 0.02 0.1</size> <!-- Dimensions: length=200mm, width=20mm, height=100mm -->
+          </box>
+        </geometry>
+        <material>
+          <diffuse>1 0 1 1</diffuse> <!-- Magenta color (255, 0, 255) -->
+          <ambient>1 0 1 1</ambient>
+        </material>
+      </visual>
 
+      <collision name='parking_link1_collision'>
+        <pose>-0.756 -2.2765625 0.786 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.2 0.02 0.1</size> <!-- Dimensions: length=200mm, width=20mm, height=100mm -->
+          </box>
+        </geometry>
+      </collision>
+      <visual name='parking_link1_visual'>
+        <pose>-0.756 -2.2765625 0.786 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>0.2 0.02 0.1</size> <!-- Dimensions: length=200mm, width=20mm, height=100mm -->
+          </box>
+        </geometry>
+        <material>
+          <diffuse>1 0 1 1</diffuse> <!-- Magenta color (255, 0, 255) -->
+          <ambient>1 0 1 1</ambient>
+        </material>
+      </visual>
 
     </link>
     <frame name='joint_box1' attached_to='base_link_wro'>
@@ -344,6 +384,20 @@
       <pose>-0.25534000000000001 -1.1054999999999999 0.74448999999999999 1.5708 -5.5511151231257827e-17 1.5708</pose>
     </frame>
     <frame name='obs6' attached_to='joint_obs6'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+    
+    <frame name='joint_obs7' attached_to='base_link_wro'>
+      <pose>-0.756 -2.0 0.786 0 0 0</pose>
+    </frame>
+    <frame name='obs7' attached_to='joint_obs7'>
+      <pose>0 0 0 0 0 0</pose>
+    </frame>
+
+    <frame name='joint_obs8' attached_to='base_link_wro'>
+        <pose>-0.756 -2.2765625 0.786 0 0 0</pose>
+    </frame>
+    <frame name='obs8' attached_to='joint_obs8'>
       <pose>0 0 0 0 0 0</pose>
     </frame>
   </model>
