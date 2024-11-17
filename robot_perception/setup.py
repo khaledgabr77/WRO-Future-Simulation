@@ -26,7 +26,8 @@ setup(
         'console_scripts': [
             'rgb_to_bgr_converter = robot_perception.rgb_to_bgr_converter:main',
             'lidar2image_node = robot_perception.lidar2image_node:main',
-
+            'teleop_to_robot_controller = robot_perception.teleop_to_robot_controller:main',
+            'lap_counter_node = robot_perception.lap_counter_node:main',
         ],
     },
 )
