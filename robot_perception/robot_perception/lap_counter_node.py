@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from yolov8_msgs.msg import DetectionArray
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Bool
 
 class LapCounterNode(Node):
     def __init__(self):
@@ -42,6 +42,10 @@ class LapCounterNode(Node):
             '/drive',
             self.drive_callback,
             10)
+        
+        self.lap_counter_publisher = self.create_publisher(Float64, '/lap_counter', 10)
+        self.line_entrance_publisher = self.create_publisher(Bool, '/line_entrance', 10)
+
         
         # State machine loop
         # self.create_timer(0.02, self.state_machine_loop)
@@ -203,7 +207,8 @@ class LapCounterNode(Node):
             # self.get_logger().info(f'Going from EXIT -> WAITING_FOR_ENTRANCE')
             return
 
-    
+        self.lap_counter_publisher.publish(Float64(data=self.lap_counter))
+
 
     def is_line_in_entrance(self):
         found_line = False
@@ -223,6 +228,10 @@ class LapCounterNode(Node):
             return
         if (det.bbox.center.position.y - det.bbox.size.y/2) > (self.image_height/2+0.1*self.image_height):
             self.get_logger().info(f'line is in entrance')
+            self.line_entrance_publisher.publish(Bool(data=True))
+        else:
+            self.line_entrance_publisher.publish(Bool(data=False))
+
     
     def drive_callback(self, msg: Float64):
         if msg.data > 0 or msg.data < 0:
