@@ -19,8 +19,8 @@ def generate_launch_description():
     field_of_view_arg = DeclareLaunchArgument('field_of_view', default_value='170.0', description='Field of view in degrees')
     enable_disparity_extender_arg = DeclareLaunchArgument('enable_disparity_extender', default_value='true', description='Enable disparity extender')
     enable_corner_case_arg = DeclareLaunchArgument('enable_corner_case', default_value='false', description='Enable corner case handling')
-    use_labeled_scan_arg = DeclareLaunchArgument('use_labeled_scan', default_value='true', description='Use labeled scan')
-    publish_speed_arg = DeclareLaunchArgument('publish_speed', default_value='false', description='Publish speed')
+    use_labeled_scan_arg = DeclareLaunchArgument('use_labeled_scan', default_value='false', description='Use labeled scan')
+    publish_speed_arg = DeclareLaunchArgument('publish_speed', default_value='true', description='Publish speed')
     discontinuity_threshold_arg = DeclareLaunchArgument('discontinuity_threshold', default_value='0.3', description='Discontinuity threshold')
     disparity_width_ratio_from_car_width_arg = DeclareLaunchArgument('disparity_width_ratio_from_car_width', default_value='0.6', description='Disparity width ratio from car width')
     safety_angle_degrees_arg = DeclareLaunchArgument('safety_angle_degrees', default_value='15.0', description='Safety angle in degrees')
@@ -68,7 +68,7 @@ def generate_launch_description():
         enable_disparity_extender_arg, enable_corner_case_arg, use_labeled_scan_arg, publish_speed_arg,
         discontinuity_threshold_arg, disparity_width_ratio_from_car_width_arg, safety_angle_degrees_arg,
         max_sub_window_size_arg, sub_window_step_arg, best_point_conv_size_arg, disparity_threshold_arg,
-        emergency_stop_distance_arg, emergency_stop_fov_ratio_arg,
+        emergency_stop_distance_arg, emergency_stop_fov_ratio_arg, scan_filter_window_size_arg, scan_topic_arg,
 
         # Launch the node with parameters
         Node(
