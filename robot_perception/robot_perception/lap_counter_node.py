@@ -237,7 +237,7 @@ class LapCounterNode(Node):
     
     def drive_callback(self, msg: Float64):
         if msg.data > 0 or msg.data < 0:
-            self.current_direction = msg.data
+            self.current_direction = msg.data /abs(msg.data)
         return
 
     def detection_callback(self, msg: DetectionArray):
