@@ -42,7 +42,8 @@ public:
         this->declare_parameter<double>("emergency_stop_fov_ratio", 0.2); 
         this->declare_parameter<double>("emergency_stop_distance", 0.1); 
         this->declare_parameter<double>("disparity_threshold", 0.5); 
-        this->declare_parameter<double>("disparity_width_ratio_from_car_wdith", 0.5);  // percentage
+        this->declare_parameter<double>("disparity_width_ratio_from_car_width", 0.5);  // percentage
+        this->declare_parameter<int>("scan_filter_window_size", 5);  // scan filter window size
 
 
         // Get parameters
@@ -68,7 +69,8 @@ public:
         emergency_stop_fov_ratio_ = this->get_parameter("emergency_stop_fov_ratio").as_double();
         emergency_stop_distance_ = this->get_parameter("emergency_stop_distance").as_double();
         disparity_threshold_ = this->get_parameter("disparity_threshold").as_double();
-        disparity_width_ratio_from_car_wdith_ = this->get_parameter("disparity_width_ratio_from_car_wdith").as_double();
+        disparity_width_ratio_from_car_width_ = this->get_parameter("disparity_width_ratio_from_car_width").as_double();
+        scan_filter_window_size_ = static_cast<size_t>(this->get_parameter("scan_filter_window_size").as_int());
 
         // Initialize processed_scan_
         processed_scan_.header.frame_id = "lidar_frame"; // Update as per your frame
@@ -131,7 +133,8 @@ private:
     double emergency_stop_fov_ratio_;
     double emergency_stop_distance_;
     double disparity_threshold_;
-    double disparity_width_ratio_from_car_wdith_;
+    double disparity_width_ratio_from_car_width_;
+    size_t scan_filter_window_size_;
 
     // Processed LaserScan
     sensor_msgs::msg::LaserScan processed_scan_;
@@ -171,7 +174,7 @@ private:
         // Step 0: Emergency Stop
         if ( isEmergencyStop(scan_msg) )
         {
-            publishDriveCommand(0.0, 0.0);
+            if (publish_speed_) publishDriveCommand(0.0, 0.0);
             return;
         }
 
@@ -218,7 +221,7 @@ private:
         {
             RCLCPP_WARN(this->get_logger(), "No valid gap found. Stopping the robot.");
             // Publish zero velocity command
-            publishDriveCommand(0.0f, 0.0f);
+            if (publish_speed_) publishDriveCommand(0.0f, 0.0f);
 
             // Publish visualization marker
             publishMarker(0.0f, scan_msg->header);
@@ -299,7 +302,7 @@ private:
         }
         return false;
     }
-    
+
     void preprocessLidar(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
     {
         // Limit the field of view
@@ -341,14 +344,42 @@ private:
             limited_intensities.assign(limited_ranges.size(), 0.0f);
         }
 
-        // Remove NaNs and infs, cap ranges at max_range_
+        // Replace INF and NaN using a sliding window average
+        size_t window_size = scan_filter_window_size_; // Define the size of the window for averaging
         float max_range = static_cast<float>(max_range_);
-        for (float &range : limited_ranges)
+
+        for (size_t i = 0; i < limited_ranges.size(); ++i)
         {
-            if (std::isnan(range)) range = 0.0f;
-            if (std::isinf(range)) range = max_range;
-            if (range > max_range) range = max_range;; // clipping
-                
+            if (std::isnan(limited_ranges[i]) || std::isinf(limited_ranges[i]))
+            {
+                float sum = 0.0f;
+                size_t valid_count = 0;
+
+                // Calculate the average of valid values in the window
+                size_t window_start = (i >= window_size) ? (i - window_size) : 0;
+                size_t window_end = std::min(i + window_size, limited_ranges.size() - 1);
+
+                for (size_t j = window_start; j <= (window_end-1); ++j)
+                {
+                    if ((std::abs(limited_ranges[j] - limited_ranges[j+1]) < 0.11) && j != i && limited_ranges[j] > 0.0f && limited_ranges[j] <= max_range && !std::isnan(limited_ranges[j]) && !std::isinf(limited_ranges[j]))
+                    {
+                        sum += limited_ranges[j];
+                        valid_count++;
+                    }
+                }
+
+                // Replace with the average if valid points are found, otherwise set to max_range
+                if (valid_count > 0)
+                {
+                    limited_ranges[i] = sum / static_cast<float>(valid_count);
+                }
+                else
+                {
+                    limited_ranges[i] = max_range; // Default to max_range if no valid values are found
+                }
+
+                if (limited_ranges[i] > max_range) limited_ranges[i] = max_range; // clipping
+            }
         }
 
         // Update processed_scan_
@@ -370,6 +401,78 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Increment: %.6f radians", processed_scan_.angle_increment);
         RCLCPP_DEBUG(this->get_logger(), "Number of ranges after preprocessing: %zu", processed_scan_.ranges.size());
     }
+
+    
+    // void preprocessLidar(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
+    // {
+    //     // Limit the field of view
+    //     double fov_rad = (field_of_view_ * M_PI) / 180.0; // Convert FOV to radians
+    //     double half_fov = fov_rad / 2.0;
+
+    //     // Calculate desired angle range based on original scan's angle_min
+    //     double desired_angle_min = scan_msg->angle_min + (scan_msg->angle_max - scan_msg->angle_min - fov_rad) / 2.0;
+    //     double desired_angle_max = desired_angle_min + fov_rad;
+
+    //     // Ensure desired angles are within the original scan's range
+    //     if (desired_angle_min < scan_msg->angle_min)
+    //         desired_angle_min = scan_msg->angle_min;
+
+    //     if (desired_angle_max > scan_msg->angle_max)
+    //         desired_angle_max = scan_msg->angle_max;
+
+    //     double angle_increment = scan_msg->angle_increment;
+
+    //     // Calculate start and end indices based on desired FOV
+    //     int start_idx = static_cast<int>((desired_angle_min - scan_msg->angle_min) / angle_increment);
+    //     int end_idx = static_cast<int>((desired_angle_max - scan_msg->angle_min) / angle_increment);
+
+    //     // Clamp indices to valid range
+    //     start_idx = std::max(0, start_idx);
+    //     end_idx = std::min(static_cast<int>(scan_msg->ranges.size()) - 1, end_idx);
+
+    //     // Extract the limited FOV ranges
+    //     std::vector<float> limited_ranges(scan_msg->ranges.begin() + start_idx, scan_msg->ranges.begin() + end_idx + 1);
+
+    //     std::vector<float> limited_intensities;
+    //     if (scan_msg->intensities.size() >= scan_msg->ranges.size())
+    //     {
+    //         limited_intensities.assign(scan_msg->intensities.begin() + start_idx, scan_msg->intensities.begin() + end_idx + 1);
+    //     }
+    //     else
+    //     {
+    //         // If intensities are not available or not matching ranges size, fill with zeros
+    //         limited_intensities.assign(limited_ranges.size(), 0.0f);
+    //     }
+
+    //     // Remove NaNs and infs, cap ranges at max_range_
+    //     float max_range = static_cast<float>(max_range_);
+    //     for (float &range : limited_ranges)
+    //     {
+    //         if (std::isnan(range)) range = 0.0f;
+    //         if (std::isinf(range)) range = max_range;
+    //         if (range > max_range) range = max_range;; // clipping
+                
+    //     }
+
+    //     // Update processed_scan_
+    //     processed_scan_.header = scan_msg->header;
+    //     processed_scan_.angle_min = scan_msg->angle_min + (start_idx * angle_increment);
+    //     processed_scan_.angle_max = scan_msg->angle_min + (end_idx * angle_increment);
+    //     processed_scan_.angle_increment = angle_increment;
+    //     processed_scan_.time_increment = scan_msg->time_increment;
+    //     processed_scan_.scan_time = scan_msg->scan_time;
+    //     processed_scan_.range_min = scan_msg->range_min;
+    //     processed_scan_.range_max = scan_msg->range_max;
+    //     processed_scan_.ranges = limited_ranges;
+    //     processed_scan_.intensities = limited_intensities;
+
+    //     // Debugging: Log the adjusted angles
+    //     RCLCPP_DEBUG(this->get_logger(), "Preprocessed LiDAR:");
+    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Min: %.4f radians", processed_scan_.angle_min);
+    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Max: %.4f radians", processed_scan_.angle_max);
+    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Increment: %.6f radians", processed_scan_.angle_increment);
+    //     RCLCPP_DEBUG(this->get_logger(), "Number of ranges after preprocessing: %zu", processed_scan_.ranges.size());
+    // }
 
     
     void processIntensities()
@@ -518,7 +621,7 @@ private:
         size_t num_ranges = processed_scan_.ranges.size();
         float angle_increment = processed_scan_.angle_increment;
         float car_half_width = static_cast<float>(car_width_ / 2.0);
-        float car_width_portion = disparity_width_ratio_from_car_wdith_ * static_cast<float>(car_width_);
+        float car_width_portion = disparity_width_ratio_from_car_width_ * static_cast<float>(car_width_);
 
         for (size_t i = 0; i < num_ranges - 1; ++i)
         {
@@ -574,6 +677,11 @@ private:
                     std::fill(processed_scan_.ranges.begin() + i + 1,
                             processed_scan_.ranges.begin() + end_idx + 1,
                             r1);
+
+                    // Debugging: Log disparity extender actions
+                    RCLCPP_INFO(this->get_logger(),
+                                "Applied disparity extender at index %zu with theta %.4f degrees and num_points %zu, car_width_portion %.3f, min_range %0.3f",
+                                i, theta*180.0/3.1415, num_points, car_width_portion, min_range);
                     i = i + num_points;
                 }
                 else
@@ -583,12 +691,13 @@ private:
                     std::fill(processed_scan_.ranges.begin() + start_idx,
                             processed_scan_.ranges.begin() + i + 1,
                             r2);
+                    // Debugging: Log disparity extender actions
+                    RCLCPP_INFO(this->get_logger(),
+                                "Applied disparity extender at index %zu with theta %.4f degrees and num_points %zu, car_width_portion %.3f, min_range %0.3f",
+                                i, theta*180.0/3.1415, num_points, car_width_portion, min_range);
                 }
 
-                // Debugging: Log disparity extender actions
-                RCLCPP_DEBUG(this->get_logger(),
-                            "Applied disparity extender at index %zu with theta %.4f radians and num_points %zu",
-                            i, theta, num_points);
+                
             }
         }
     }

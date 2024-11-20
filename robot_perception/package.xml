@@ -7,10 +7,13 @@
 
   <!-- Buildtool dependencies -->
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
 
   <!-- Runtime dependencies -->
   <depend>rclcpp</depend>
+  <depend>rclpy</depend>
   <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
   <depend>cv_bridge</depend>
   <depend>tf2_ros</depend>
@@ -25,6 +28,7 @@
   <depend>yolov8_msgs</depend>
   <!-- Test dependencies -->
   <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

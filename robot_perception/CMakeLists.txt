@@ -3,7 +3,11 @@ project(robot_perception)
 
 # Find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
@@ -16,8 +20,13 @@ find_package(vision_msgs REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(image_transport REQUIRED)
 find_package(yolov8_msgs REQUIRED)
+ament_python_install_package(${PROJECT_NAME})
 
-
+install(PROGRAMS
+  ${PROJECT_NAME}/lap_counter_node.py
+  
+  DESTINATION lib/${PROJECT_NAME}
+)
 # Include directories
 include_directories(
   include
@@ -33,6 +42,7 @@ add_executable(rgb_to_bgr_converter src/rgb_to_bgr_converter.cpp)
 ament_target_dependencies(lidar2image_node
   rclcpp
   sensor_msgs
+  std_msgs
   geometry_msgs
   cv_bridge
   tf2_ros

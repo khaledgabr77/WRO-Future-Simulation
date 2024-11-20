@@ -16,6 +16,12 @@ from launch_ros.actions import Node
 def generate_launch_description():
 
     # YOLO
+    yolo_model_arg = DeclareLaunchArgument(
+        'yolo_model',
+        default_value='/home/d2d/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.mix.yolov11n.seg.engine',
+        description='Path to YOLO model'
+    )
+    yolo_model = LaunchConfiguration('yolo_model')
     yolo_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
             PathJoinSubstitution([
@@ -24,8 +30,8 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            'model': '/home/d2d/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.mix.yolov11n.seg.engine',
-            'threshold' : '0.5',
+            'model': yolo_model,
+            'threshold' : '0.7',
             'input_image_topic' : '/bgr_image',
             'device': 'cuda:0',
             'task': 'segment'
@@ -50,7 +56,9 @@ def generate_launch_description():
         name='lidar2image_node',
     )
     return LaunchDescription([
-        yolo_launch,
+        yolo_model_arg,
         rgb_to_bgr_node,
-        lidar2image_node
+        yolo_launch,
+        lidar2image_node,
+        
     ])

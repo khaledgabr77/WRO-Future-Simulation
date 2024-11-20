@@ -7,7 +7,7 @@ from launch.actions import DeclareLaunchArgument
 from launch.actions import IncludeLaunchDescription
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, EnvironmentVariable
 
 from launch_ros.actions import Node
 from math import radians
@@ -39,10 +39,11 @@ def generate_launch_description():
     rplidar_ros = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(rplidar_ros_launch),
         launch_arguments={
-            'serial_port': '/dev/lidar',
+            'serial_port': EnvironmentVariable('RPLIDAR_SERIAL_PORT', default_value='/dev/lidar'), 
             'frame_id' : 'lidar_link',
             'inverted': 'false',
-            'flip_x_axis' : 'true'
+            'flip_x_axis' : 'true',
+            'scan_mode' : 'Standard'
         }.items()
     )
 
@@ -66,7 +67,10 @@ def generate_launch_description():
 
     # Include the perception launch file
     perception_launch_include = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(perception_launch)
+        PythonLaunchDescriptionSource(perception_launch),
+        launch_arguments={
+            'yolo_model': EnvironmentVariable('YOLO_MODEL_PATH', default_value=''), 
+        }.items()
     )
 
     # Path to the ftg_launch file
@@ -90,7 +94,34 @@ def generate_launch_description():
 
     # Include the ftg_launch file
     ftg_cpp_launch_include = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(ftg_cpp_launch_path)
+        PythonLaunchDescriptionSource(ftg_cpp_launch_path),
+        launch_arguments={
+            'wheel_base': EnvironmentVariable('WHEEL_BASE', default_value='0.165'),
+            'car_width': EnvironmentVariable('CAR_WIDTH', default_value='0.127'),
+            'wheel_radius': EnvironmentVariable('WHEEL_RADIUS', default_value='0.025'),
+            'safety_radius': EnvironmentVariable('SAFETY_RADIUS', default_value='0.12'),
+            'bubble_safety_radius': EnvironmentVariable('BUBBLE_SAFETY_RADIUS', default_value='0.0335'),
+            'speed_safety_radius': EnvironmentVariable('SPEED_SAFETY_RADIUS', default_value='0.10'),
+            'max_speed': EnvironmentVariable('MAX_SPEED', default_value='0.3'),
+            'min_speed': EnvironmentVariable('MIN_SPEED', default_value='0.15'),
+            'max_range': EnvironmentVariable('MAX_RANGE', default_value='3.0'),
+            'field_of_view': EnvironmentVariable('FIELD_OF_VIEW', default_value='170.0'),
+            'enable_disparity_extender': EnvironmentVariable('ENABLE_DISPARITY_EXTENDER', default_value='true'),
+            'enable_corner_case': EnvironmentVariable('ENABLE_CORNER_CASE', default_value='false'),
+            'use_labeled_scan': EnvironmentVariable('USE_LABELED_SCAN', default_value='true'),
+            'publish_speed': EnvironmentVariable('PUBLISH_SPEED', default_value='false'),
+            'discontinuity_threshold': EnvironmentVariable('DISCONTINUITY_THRESHOLD', default_value='0.3'),
+            'disparity_width_ratio_from_car_width': EnvironmentVariable('DISPARITY_WIDTH_RATIO_FROM_CAR_WIDTH', default_value='0.6'),
+            'safety_angle_degrees': EnvironmentVariable('SAFETY_ANGLE_DEGREES', default_value='15.0'),
+            'max_sub_window_size': EnvironmentVariable('MAX_SUB_WINDOW_SIZE', default_value='100'),
+            'sub_window_step': EnvironmentVariable('SUB_WINDOW_STEP', default_value='3'),
+            'best_point_conv_size': EnvironmentVariable('BEST_POINT_CONV_SIZE', default_value='5'),
+            'disparity_threshold': EnvironmentVariable('DISPARITY_THRESHOLD', default_value='0.5'),
+            'emergency_stop_distance': EnvironmentVariable('EMERGENCY_STOP_DISTANCE', default_value='0.15'),
+            'emergency_stop_fov_ratio': EnvironmentVariable('EMERGENCY_STOP_FOV_RATIO', default_value='0.2'),
+            'scan_filter_window_size' : EnvironmentVariable('SCAN_FILTER_WINDOW_SIZE', default_value='5'),
+            'scan_topic' : EnvironmentVariable('SCAN_TOPIC', default_value='/scan')
+        }.items()
     )
 
     # Path to the car_controller launch file

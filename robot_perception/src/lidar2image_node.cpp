@@ -130,7 +130,7 @@ void Lidar2ImageNode::detection_image_scan_callback(
     const sensor_msgs::msg::Image::ConstSharedPtr &image_msg,
     const sensor_msgs::msg::LaserScan::ConstSharedPtr &scan_msg)
 {
-    RCLCPP_INFO(this->get_logger(), "Processing synchronized messages");
+    // RCLCPP_INFO(this->get_logger(), "Processing synchronized messages");
 
     // Ensure camera_info_ is available
     if (!camera_info_received_)
@@ -457,7 +457,7 @@ void Lidar2ImageNode::caminfoCallback(const sensor_msgs::msg::CameraInfo::Shared
         cy_ = K[5];
         camera_info_received_ = true;
 
-        RCLCPP_INFO(this->get_logger(), "Camera info received and stored.");
+        // RCLCPP_INFO(this->get_logger(), "Camera info received and stored.");
     }
     else
     {
