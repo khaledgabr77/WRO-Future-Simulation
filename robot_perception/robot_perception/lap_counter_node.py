@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import rclpy
 from rclpy.node import Node
 from yolov8_msgs.msg import DetectionArray
@@ -131,7 +133,7 @@ class LapCounterNode(Node):
         return
     
     def update_lap_counter(self):
-        self.lap_counter = self.section_counter // self.sections_per_lap
+        self.lap_counter = float(self.section_counter // self.sections_per_lap)
         return
     
     def direction_flipped(self) -> bool:
@@ -158,7 +160,7 @@ class LapCounterNode(Node):
     
     def state_machine_loop(self):
 
-        self.is_line_in_entrance()
+        # self.is_line_in_entrance()
 
         if self.START:
             self.START = False
@@ -207,7 +209,7 @@ class LapCounterNode(Node):
             # self.get_logger().info(f'Going from EXIT -> WAITING_FOR_ENTRANCE')
             return
 
-        self.lap_counter_publisher.publish(Float64(data=self.lap_counter))
+        self.lap_counter_publisher.publish(Float64(data=float(self.lap_counter)))
 
 
     def is_line_in_entrance(self):
@@ -235,7 +237,7 @@ class LapCounterNode(Node):
     
     def drive_callback(self, msg: Float64):
         if msg.data > 0 or msg.data < 0:
-            self.current_direction = msg.data
+            self.current_direction = msg.data /abs(msg.data)
         return
 
     def detection_callback(self, msg: DetectionArray):

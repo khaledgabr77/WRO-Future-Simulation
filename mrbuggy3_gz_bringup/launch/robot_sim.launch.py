@@ -33,8 +33,8 @@ def generate_launch_description():
         launch_arguments={'gz_args': PathJoinSubstitution([
             pkg_project_description,
             'worlds',
-            'default.sdf'
-            # 'wro_no_obstacle.sdf'
+            # 'default.sdf'
+            'wro_no_obstacle.sdf'
             #'wro_one_obstacle.sdf'
         ])}.items(),
     )

@@ -37,7 +37,13 @@ public:
         this->declare_parameter<int>("best_point_conv_size", 5);
         this->declare_parameter<int>("max_sub_window_size", 10); // Default: 10 points
         this->declare_parameter<int>("sub_window_step", 1); // Default: 1 point
-        
+        this->declare_parameter<double>("speed_safety_radius", 0.15); 
+        this->declare_parameter<double>("bubble_safety_radius", 0.05); 
+        this->declare_parameter<double>("emergency_stop_fov_ratio", 0.2); 
+        this->declare_parameter<double>("emergency_stop_distance", 0.1); 
+        this->declare_parameter<double>("disparity_threshold", 0.5); 
+        this->declare_parameter<double>("disparity_width_ratio_from_car_width", 0.5);  // percentage
+        this->declare_parameter<int>("scan_filter_window_size", 5);  // scan filter window size
 
 
         // Get parameters
@@ -58,9 +64,16 @@ public:
         best_point_conv_size_ = static_cast<size_t>(this->get_parameter("best_point_conv_size").as_int());
         max_sub_window_size_ = static_cast<size_t>(this->get_parameter("max_sub_window_size").as_int());
         sub_window_step_ = static_cast<size_t>(this->get_parameter("sub_window_step").as_int());
+        bubble_safety_radius_ = this->get_parameter("bubble_safety_radius").as_double();
+        speed_safety_radius_ = this->get_parameter("speed_safety_radius").as_double();
+        emergency_stop_fov_ratio_ = this->get_parameter("emergency_stop_fov_ratio").as_double();
+        emergency_stop_distance_ = this->get_parameter("emergency_stop_distance").as_double();
+        disparity_threshold_ = this->get_parameter("disparity_threshold").as_double();
+        disparity_width_ratio_from_car_width_ = this->get_parameter("disparity_width_ratio_from_car_width").as_double();
+        scan_filter_window_size_ = static_cast<size_t>(this->get_parameter("scan_filter_window_size").as_int());
 
         // Initialize processed_scan_
-        processed_scan_.header.frame_id = "laser_frame"; // Update as per your frame
+        processed_scan_.header.frame_id = "lidar_frame"; // Update as per your frame
         processed_scan_.range_min = 0.0; // Will be set based on original scan
         processed_scan_.range_max = static_cast<float>(max_range_);
         // processed_scan_.angle_min, angle_max, angle_increment, and ranges will be set in preprocessLidar
@@ -115,6 +128,13 @@ private:
     size_t best_point_conv_size_;
     size_t max_sub_window_size_;
     size_t sub_window_step_;
+    double speed_safety_radius_;
+    double bubble_safety_radius_;
+    double emergency_stop_fov_ratio_;
+    double emergency_stop_distance_;
+    double disparity_threshold_;
+    double disparity_width_ratio_from_car_width_;
+    size_t scan_filter_window_size_;
 
     // Processed LaserScan
     sensor_msgs::msg::LaserScan processed_scan_;
@@ -151,6 +171,14 @@ private:
         // Start timing
         auto start_time = this->now();
 
+        // Step 0: Emergency Stop
+        if ( isEmergencyStop(scan_msg) )
+        {
+            if (publish_speed_) publishDriveCommand(0.0, 0.0);
+            return;
+        }
+
+        
         // Step 1: Preprocess the LiDAR data and limit the field of view
         RCLCPP_DEBUG(this->get_logger(), "Step 1: Preprocessing LiDAR data");
         preprocessLidar(scan_msg);
@@ -182,7 +210,8 @@ private:
         // Step 4: Find the deepest valid gap that satisfies width constraint
         RCLCPP_DEBUG(this->get_logger(), "Step 4: Finding deepest valid gap that satisfies width constraint");
         auto gap = findBestGap();
-        // auto sub_gap = findDeepestSubWindow(gap.first, gap.second);
+        gap = findDeepestSubWindow(gap.first, gap.second);
+        gap = findMostContinuousGap(gap.first, gap.second);
 
         // Publish the best gap points
         publishBestGapPoints(gap.first, gap.second, scan_msg->header);
@@ -192,7 +221,7 @@ private:
         {
             RCLCPP_WARN(this->get_logger(), "No valid gap found. Stopping the robot.");
             // Publish zero velocity command
-            publishDriveCommand(0.0f, 0.0f);
+            if (publish_speed_) publishDriveCommand(0.0f, 0.0f);
 
             // Publish visualization marker
             publishMarker(0.0f, scan_msg->header);
@@ -207,7 +236,9 @@ private:
 
         // Step 6: Find the best point in the gap
         RCLCPP_DEBUG(this->get_logger(), "Step 6: Finding best point in the gap");
-        size_t best_point_idx = findBestPoint(gap.first, gap.second);
+        // size_t best_point_idx = findBestPoint(gap.first, gap.second);
+        size_t best_point_idx = findMidPointInGap(gap.first, gap.second);
+        
 
         // Step 7: Compute steering angle and speed
         RCLCPP_DEBUG(this->get_logger(), "Step 7: Computing steering angle and speed");
@@ -230,6 +261,46 @@ private:
         auto end_time_final = this->now();
         auto duration_final = end_time_final - start_time;
         RCLCPP_INFO(this->get_logger(), "Execution Time: %.6f seconds", duration_final.seconds());
+    }
+
+    bool isEmergencyStop(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
+    {
+        std::vector<float> ranges(scan_msg->ranges.begin(), scan_msg->ranges.end());
+
+        // Remove NaN and Inf values
+        ranges.erase(std::remove_if(ranges.begin(), ranges.end(), [](float range) {
+            return std::isnan(range) || std::isinf(range);
+        }), ranges.end());
+
+        int num_ranges = ranges.size();
+        int front_angle = num_ranges / 2;
+        int angle_range = emergency_stop_fov_ratio_* num_ranges ;  
+
+        int start_idx = std::max(front_angle - angle_range, 0);
+        int end_idx = std::min(front_angle + angle_range, num_ranges - 1);
+
+        std::vector<float> front_ranges(ranges.begin() + start_idx, ranges.begin() + end_idx + 1);
+
+        // Filter out any zero values to avoid false readings
+        std::vector<float> valid_front_ranges;
+        for (float range : front_ranges)
+        {
+            if (range > 0.0)
+                valid_front_ranges.push_back(range);
+        }
+
+        float min_range = max_range_;
+        if (!valid_front_ranges.empty())
+        {
+            min_range = *std::min_element(valid_front_ranges.begin(), valid_front_ranges.end());
+        }
+
+        if (min_range < emergency_stop_distance_)
+        {
+            RCLCPP_WARN(this->get_logger(), "Emergency stop triggered! Obstacle at %.2f meters.", min_range);
+            return true;
+        }
+        return false;
     }
 
     void preprocessLidar(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
@@ -273,16 +344,42 @@ private:
             limited_intensities.assign(limited_ranges.size(), 0.0f);
         }
 
-        // Remove NaNs and infs, cap ranges at max_range_
+        // Replace INF and NaN using a sliding window average
+        size_t window_size = scan_filter_window_size_; // Define the size of the window for averaging
         float max_range = static_cast<float>(max_range_);
-        for (float &range : limited_ranges)
+
+        for (size_t i = 0; i < limited_ranges.size(); ++i)
         {
-            if (std::isnan(range) || std::isinf(range))
+            if (std::isnan(limited_ranges[i]) || std::isinf(limited_ranges[i]))
             {
-                range = 0.0f;
+                float sum = 0.0f;
+                size_t valid_count = 0;
+
+                // Calculate the average of valid values in the window
+                size_t window_start = (i >= window_size) ? (i - window_size) : 0;
+                size_t window_end = std::min(i + window_size, limited_ranges.size() - 1);
+
+                for (size_t j = window_start; j <= (window_end-1); ++j)
+                {
+                    if ((std::abs(limited_ranges[j] - limited_ranges[j+1]) < 0.11) && j != i && limited_ranges[j] > 0.0f && limited_ranges[j] <= max_range && !std::isnan(limited_ranges[j]) && !std::isinf(limited_ranges[j]))
+                    {
+                        sum += limited_ranges[j];
+                        valid_count++;
+                    }
+                }
+
+                // Replace with the average if valid points are found, otherwise set to max_range
+                if (valid_count > 0)
+                {
+                    limited_ranges[i] = sum / static_cast<float>(valid_count);
+                }
+                else
+                {
+                    limited_ranges[i] = max_range; // Default to max_range if no valid values are found
+                }
+
+                if (limited_ranges[i] > max_range) limited_ranges[i] = max_range; // clipping
             }
-            if (range > max_range) // clipping
-                range = max_range;
         }
 
         // Update processed_scan_
@@ -306,6 +403,78 @@ private:
     }
 
     
+    // void preprocessLidar(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
+    // {
+    //     // Limit the field of view
+    //     double fov_rad = (field_of_view_ * M_PI) / 180.0; // Convert FOV to radians
+    //     double half_fov = fov_rad / 2.0;
+
+    //     // Calculate desired angle range based on original scan's angle_min
+    //     double desired_angle_min = scan_msg->angle_min + (scan_msg->angle_max - scan_msg->angle_min - fov_rad) / 2.0;
+    //     double desired_angle_max = desired_angle_min + fov_rad;
+
+    //     // Ensure desired angles are within the original scan's range
+    //     if (desired_angle_min < scan_msg->angle_min)
+    //         desired_angle_min = scan_msg->angle_min;
+
+    //     if (desired_angle_max > scan_msg->angle_max)
+    //         desired_angle_max = scan_msg->angle_max;
+
+    //     double angle_increment = scan_msg->angle_increment;
+
+    //     // Calculate start and end indices based on desired FOV
+    //     int start_idx = static_cast<int>((desired_angle_min - scan_msg->angle_min) / angle_increment);
+    //     int end_idx = static_cast<int>((desired_angle_max - scan_msg->angle_min) / angle_increment);
+
+    //     // Clamp indices to valid range
+    //     start_idx = std::max(0, start_idx);
+    //     end_idx = std::min(static_cast<int>(scan_msg->ranges.size()) - 1, end_idx);
+
+    //     // Extract the limited FOV ranges
+    //     std::vector<float> limited_ranges(scan_msg->ranges.begin() + start_idx, scan_msg->ranges.begin() + end_idx + 1);
+
+    //     std::vector<float> limited_intensities;
+    //     if (scan_msg->intensities.size() >= scan_msg->ranges.size())
+    //     {
+    //         limited_intensities.assign(scan_msg->intensities.begin() + start_idx, scan_msg->intensities.begin() + end_idx + 1);
+    //     }
+    //     else
+    //     {
+    //         // If intensities are not available or not matching ranges size, fill with zeros
+    //         limited_intensities.assign(limited_ranges.size(), 0.0f);
+    //     }
+
+    //     // Remove NaNs and infs, cap ranges at max_range_
+    //     float max_range = static_cast<float>(max_range_);
+    //     for (float &range : limited_ranges)
+    //     {
+    //         if (std::isnan(range)) range = 0.0f;
+    //         if (std::isinf(range)) range = max_range;
+    //         if (range > max_range) range = max_range;; // clipping
+                
+    //     }
+
+    //     // Update processed_scan_
+    //     processed_scan_.header = scan_msg->header;
+    //     processed_scan_.angle_min = scan_msg->angle_min + (start_idx * angle_increment);
+    //     processed_scan_.angle_max = scan_msg->angle_min + (end_idx * angle_increment);
+    //     processed_scan_.angle_increment = angle_increment;
+    //     processed_scan_.time_increment = scan_msg->time_increment;
+    //     processed_scan_.scan_time = scan_msg->scan_time;
+    //     processed_scan_.range_min = scan_msg->range_min;
+    //     processed_scan_.range_max = scan_msg->range_max;
+    //     processed_scan_.ranges = limited_ranges;
+    //     processed_scan_.intensities = limited_intensities;
+
+    //     // Debugging: Log the adjusted angles
+    //     RCLCPP_DEBUG(this->get_logger(), "Preprocessed LiDAR:");
+    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Min: %.4f radians", processed_scan_.angle_min);
+    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Max: %.4f radians", processed_scan_.angle_max);
+    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Increment: %.6f radians", processed_scan_.angle_increment);
+    //     RCLCPP_DEBUG(this->get_logger(), "Number of ranges after preprocessing: %zu", processed_scan_.ranges.size());
+    // }
+
+    
     void processIntensities()
     {
         if (processed_scan_.intensities.size() != processed_scan_.ranges.size())
@@ -327,15 +496,15 @@ private:
 
             // Check if intensity is 1 or 2 or 3
             // label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
-            int int_intensity = static_cast<int>(intensity); // From float to int
+            //int int_intensity = static_cast<int>(intensity); // From float to int
 
-            if ((int_intensity == 1 || int_intensity == 2 || int_intensity == 3) && range > 0.0f)
+            if ((intensity == 1.0 || intensity == 2.0 || intensity == 3.0) )
             {
                 if (range < min_range)
                 {
                     min_range = range;
                     closest_idx = i;
-                    label = int_intensity;
+                    label = intensity;
                     found = true;
                 }
             }
@@ -347,7 +516,7 @@ private:
 
             // Modify the ranges based on the label
             // label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
-            if (label == 1)
+            if (label == 1.0)
             {
                 // Green object: modify ranges on the right
                 for (size_t i = 0; i < closest_idx; ++i)
@@ -355,7 +524,7 @@ private:
                     processed_scan_.ranges[i] = 0.0; //min_range;
                 }
             }
-            else if (label == 3)
+            else if (label == 3.0)
             {
                 // Red object: modify ranges on the left
                 for (size_t i = closest_idx + 1; i < processed_scan_.ranges.size(); ++i)
@@ -372,8 +541,19 @@ private:
 
     void applySafetyBubble()
     {
-        // Find the closest point
-        size_t closest_idx = std::min_element(processed_scan_.ranges.begin(), processed_scan_.ranges.end()) - processed_scan_.ranges.begin();
+        // Find the index of the closest point
+        size_t closest_idx = 0;
+        float min_range = std::numeric_limits<float>::max();
+
+        for (size_t i = 0; i < processed_scan_.ranges.size(); ++i)
+        {
+            float range = processed_scan_.ranges[i];
+            if (range > 0.0f && range < min_range)
+            {
+                min_range = range;
+                closest_idx = i;
+            }
+        }
 
         // Prevent out-of-bounds
         if (closest_idx >= processed_scan_.ranges.size())
@@ -382,29 +562,66 @@ private:
             return;
         }
 
-        // float theta = std::asin(ratio);
-        float theta = std::atan2(safety_radius_, processed_scan_.ranges[closest_idx]);
+        // Calculate theta using arcsine instead of atan2
+        float ratio = bubble_safety_radius_ / min_range;
+
+        // Clamp the ratio to the valid range for asin [-1, 1]
+        if (ratio > 1.0f)
+        {
+            ratio = 1.0f;
+            RCLCPP_WARN(this->get_logger(),
+                        "Ratio (bubble_safety_radius_ / min_range) exceeds 1. Clamping to 1. Setting theta to pi/2 radians.");
+        }
+        else if (ratio < -1.0f)
+        {
+            ratio = -1.0f;
+            RCLCPP_WARN(this->get_logger(),
+                        "Negative ratio encountered. Clamping to -1. Setting theta to -pi/2 radians.");
+        }
+
+        float theta = std::asin(ratio); // Using arcsine instead of atan2
 
         // Calculate the number of points to clear around the closest point
-        size_t bubble_size = static_cast<size_t>(theta / processed_scan_.angle_increment);
+        size_t bubble_size = 0;
+        if (processed_scan_.angle_increment > 0.0f)
+        {
+            bubble_size = static_cast<size_t>(theta / processed_scan_.angle_increment);
+        }
+        else
+        {
+            RCLCPP_ERROR(this->get_logger(), "Angle increment is zero or negative. Cannot compute bubble size.");
+            return; // Skip this iteration if angle_increment is invalid
+        }
 
-        size_t start_idx = (closest_idx > bubble_size) ? (closest_idx - bubble_size) : 0;
+        // Ensure bubble_size is non-negative
+        if (theta < 0.0f)
+        {
+            bubble_size = 0;
+        }
+
+        size_t start_idx = (closest_idx >= bubble_size) ? (closest_idx - bubble_size) : 0;
         size_t end_idx = std::min(closest_idx + bubble_size, processed_scan_.ranges.size() - 1);
 
-        std::fill(processed_scan_.ranges.begin() + start_idx, processed_scan_.ranges.begin() + end_idx + 1, 0.0f);
+        // Clear the ranges within the safety bubble by setting them to 0.0f
+        std::fill(processed_scan_.ranges.begin() + start_idx,
+                processed_scan_.ranges.begin() + end_idx + 1,
+                0.0f);
 
         // Log the computed values
-        RCLCPP_INFO(this->get_logger(), "Bubble Size: %zu", bubble_size);
+        RCLCPP_INFO(this->get_logger(), "Safety Bubble Size: %zu points", bubble_size);
         RCLCPP_INFO(this->get_logger(), "Closest Index: %zu", closest_idx);
         RCLCPP_INFO(this->get_logger(), "Start Index: %zu", start_idx);
         RCLCPP_INFO(this->get_logger(), "End Index: %zu", end_idx);
+        RCLCPP_INFO(this->get_logger(), "Safety Bubble Theta: %.4f radians (%.2f degrees)", theta, theta * 180.0 / M_PI);
     }
+
 
     void applyDisparityExtender()
     {
         size_t num_ranges = processed_scan_.ranges.size();
         float angle_increment = processed_scan_.angle_increment;
         float car_half_width = static_cast<float>(car_width_ / 2.0);
+        float car_width_portion = disparity_width_ratio_from_car_width_ * static_cast<float>(car_width_);
 
         for (size_t i = 0; i < num_ranges - 1; ++i)
         {
@@ -417,32 +634,74 @@ private:
 
             float range_diff = std::abs(r2 - r1);
 
-            if (range_diff > 1.0) // TODO: Make this a parameter (e.g., declare_parameter)
+            if (range_diff > disparity_threshold_) // TODO: Make this a parameter (e.g., declare_parameter)
             {
                 // Calculate the number of points to extend
                 float min_range = std::min(r1, r2);
 
-                float theta = std::atan2(car_half_width, min_range);
-                size_t num_points = static_cast<size_t>(theta / angle_increment);
-
-                if (r1 < r2)
+                // Prevent division by zero and ensure the argument for asin is within [-1, 1]
+                float ratio = car_width_portion / min_range;
+                if (ratio > 1.0f)
                 {
-                    // Extend to the right
-                    size_t end_idx = std::min(i + num_points, num_ranges - 1);
-                    std::fill(processed_scan_.ranges.begin() + i + 1, processed_scan_.ranges.begin() + end_idx + 1, r1);
+                    // If the ratio exceeds 1, set theta to 90 degrees (pi/2 radians)
+                    ratio = 1.0f;
+                    RCLCPP_WARN(this->get_logger(),
+                                "Ratio (car_width_portion / min_range) exceeds 1. Setting theta to pi/2 radians.");
+                }
+                else if (ratio < -1.0f)
+                {
+                    // Although unlikely, handle negative ratios just in case
+                    ratio = -1.0f;
+                    RCLCPP_WARN(this->get_logger(),
+                                "Negative ratio encountered. Setting theta to -pi/2 radians.");
+                }
+
+                float theta = std::asin(ratio); // Using arcsine instead of atan2
+
+                // Calculate the number of points to extend based on theta
+                size_t num_points = 0;
+                if (angle_increment > 0.0f)
+                {
+                    num_points = static_cast<size_t>(theta / angle_increment);
                 }
                 else
                 {
-                    // Extend to the left
-                    size_t start_idx = (i >= num_points) ? (i - num_points + 1) : 0;
-                    std::fill(processed_scan_.ranges.begin() + start_idx, processed_scan_.ranges.begin() + i + 1, r2);
+                    RCLCPP_ERROR(this->get_logger(), "Angle increment is zero or negative.");
+                    continue; // Skip this iteration if angle_increment is invalid
                 }
 
-                // Debugging: Log disparity extender actions
-                RCLCPP_DEBUG(this->get_logger(), "Applied disparity extender at index %zu", i);
+                if (r1 < r2)
+                {
+                    // Extend to the left
+                    size_t end_idx = std::min(i + num_points, num_ranges - 1);
+                    std::fill(processed_scan_.ranges.begin() + i + 1,
+                            processed_scan_.ranges.begin() + end_idx + 1,
+                            r1);
+
+                    // Debugging: Log disparity extender actions
+                    RCLCPP_INFO(this->get_logger(),
+                                "Applied disparity extender at index %zu with theta %.4f degrees and num_points %zu, car_width_portion %.3f, min_range %0.3f",
+                                i, theta*180.0/3.1415, num_points, car_width_portion, min_range);
+                    i = i + num_points;
+                }
+                else
+                {
+                    // Extend to the right
+                    size_t start_idx = (i >= num_points) ? (i - num_points + 1) : 0;
+                    std::fill(processed_scan_.ranges.begin() + start_idx,
+                            processed_scan_.ranges.begin() + i + 1,
+                            r2);
+                    // Debugging: Log disparity extender actions
+                    RCLCPP_INFO(this->get_logger(),
+                                "Applied disparity extender at index %zu with theta %.4f degrees and num_points %zu, car_width_portion %.3f, min_range %0.3f",
+                                i, theta*180.0/3.1415, num_points, car_width_portion, min_range);
+                }
+
+                
             }
         }
     }
+
 
     // Updated findBestGap function
     std::pair<size_t, size_t> findBestGap()
@@ -607,7 +866,86 @@ private:
     }
 
  
+    /**
+    * @brief Finds the most continuous sub-gap within a given gap based on a discontinuity threshold.
+    *
+    * @param gap_start The starting index of the deepest gap.
+    * @param gap_end The ending index of the deepest gap.
+    * @return A pair containing the start and end indices of the most continuous sub-gap.
+    */
+    std::pair<size_t, size_t> findMostContinuousGap(size_t gap_start, size_t gap_end)
+    {
+        const auto& ranges = processed_scan_.ranges;
+        double threshold = discontinuity_threshold_;
 
+        size_t best_start = gap_start;
+        size_t best_end = gap_start;
+        size_t current_start = gap_start;
+        size_t current_end = gap_start;
+
+        for (size_t i = gap_start; i < gap_end; ++i)
+        {
+            // Calculate the absolute difference between consecutive range points
+            if (std::abs(ranges[i + 1] - ranges[i]) <= threshold)
+            {
+                // Continue the current continuous gap
+                current_end = i + 1;
+            }
+            else
+            {
+                // Check if the current continuous gap is the longest so far
+                if ((current_end - current_start) > (best_end - best_start))
+                {
+                    best_start = current_start;
+                    best_end = current_end;
+                }
+                // Start a new continuous gap
+                current_start = i + 1;
+                current_end = i + 1;
+            }
+        }
+
+        // After the loop, check the last continuous gap
+        if ((current_end - current_start) > (best_end - best_start))
+        {
+            best_start = current_start;
+            best_end = current_end;
+        }
+
+        // Handle the case where no continuous sub-gap is found
+        if (best_end < best_start)
+        {
+            best_start = gap_start;
+            best_end = gap_start;
+        }
+
+        RCLCPP_DEBUG(this->get_logger(), "Most continuous gap from index %zu to %zu", best_start, best_end);
+
+        return {best_start, best_end};
+    }
+
+
+    size_t findMidPointInGap(size_t start_idx, size_t end_idx)
+    {
+        
+        // Select mid-point in the gap
+        const auto& ranges = processed_scan_.ranges;
+        size_t gap_size = end_idx - start_idx;
+
+        if (gap_size == 0)
+        {
+            RCLCPP_WARN(this->get_logger(), "Gap size is zero. Selecting start index as best point.");
+            return start_idx;
+        }
+
+
+        size_t best_point_idx = (start_idx + end_idx) / 2;
+
+        RCLCPP_DEBUG(this->get_logger(), "Best point in gap at index %zu with range %.2f meters",
+                     best_point_idx, ranges[best_point_idx]);
+
+        return best_point_idx;
+    }
 
     // Updated findBestPoint function
     size_t findBestPoint(size_t start_idx, size_t end_idx)
@@ -656,6 +994,36 @@ private:
         return best_point_idx;
     }
 
+    // size_t findBestPoint(size_t start_idx, size_t end_idx)
+    // {
+    //     const auto& ranges = processed_scan_.ranges;
+
+    //     if (start_idx >= end_idx || end_idx >= ranges.size())
+    //     {
+    //         RCLCPP_WARN(this->get_logger(), "Invalid index range. Returning start index.");
+    //         return start_idx;
+    //     }
+
+    //     // Initialize max depth and index
+    //     float max_depth = ranges[start_idx];
+    //     size_t best_point_idx = start_idx;
+
+    //     // Iterate through the range to find the maximum depth
+    //     for (size_t i = start_idx; i <= end_idx; ++i)
+    //     {
+    //         if (ranges[i] > max_depth)
+    //         {
+    //             max_depth = ranges[i];
+    //             best_point_idx = i;
+    //         }
+    //     }
+
+    //     RCLCPP_DEBUG(this->get_logger(), "Best point in gap at index %zu with range %.2f meters",
+    //                 best_point_idx, max_depth);
+
+    //     return best_point_idx;
+    // }
+
     float computeSpeed()
     {
         // Compute speed based on minimum distance to obstacles in front
@@ -677,9 +1045,9 @@ private:
 
         float speed = static_cast<float>(min_speed_);
 
-        if (min_range > (safety_radius_*2))
+        if (min_range > (speed_safety_radius_*2))
         {
-            speed = static_cast<float>(min_speed_ + (max_speed_ - min_speed_) * ((min_range - safety_radius_) / (max_range_ - safety_radius_)));
+            speed = static_cast<float>(min_speed_ + (max_speed_ - min_speed_) * ((min_range - speed_safety_radius_) / (max_range_ - speed_safety_radius_)));
             speed = std::min(speed, static_cast<float>(max_speed_));
         }
         else

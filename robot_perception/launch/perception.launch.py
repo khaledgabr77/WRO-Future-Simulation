@@ -24,7 +24,7 @@ def generate_launch_description():
             ])
         ]),
         launch_arguments={
-            'model': '/home/user/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.mix.yolov11n.seg.pt',
+            'model': '/home/user/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.with_lines.2.v11.seg.pt',
             'threshold' : '0.5',
             'input_image_topic' : '/bgr_image',
             'device': 'cuda:0',
