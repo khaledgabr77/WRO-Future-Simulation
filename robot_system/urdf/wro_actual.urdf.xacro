@@ -31,11 +31,11 @@
   <xacro:property name="camera_length" value="0.021"/>   <!-- 25 mm -->
   <xacro:property name="camera_width" value="0.03"/>    <!-- 24 mm -->
   <xacro:property name="camera_height" value="0.03"/>   <!-- 9 mm -->
-  <xacro:property name="camera_pos_x" value="-0.002"/>   <!-- 8.7 cm forward -->
+  <xacro:property name="camera_pos_x" value="0.03"/>   <!-- 8.7 cm forward -->
   <xacro:property name="camera_pos_y" value="0.0"/>      <!-- Centered in y-axis -->
-  <xacro:property name="camera_pos_z" value="0.1106"/>     <!-- 18.0 cm above base -->
-  <xacro:property name="camera_pitch" value="0.262"/>  <!-- 12 degrees in radians -->
-  <xacro:property name="camera_yaw" value="-0.05"/>  <!-- 12 degrees in radians -->
+  <xacro:property name="camera_pos_z" value="0.10"/>     <!-- 18.0 cm above base -->
+  <xacro:property name="camera_pitch" value="0.191986"/>  <!-- 12 degrees in radians -->
+  <xacro:property name="camera_yaw" value="0.05"/>  <!-- 12 degrees in radians -->
 
   <!-- Base Link -->
   <link name="base_link" />
