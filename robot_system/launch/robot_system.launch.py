@@ -120,7 +120,12 @@ def generate_launch_description():
             'emergency_stop_distance': EnvironmentVariable('EMERGENCY_STOP_DISTANCE', default_value='0.15'),
             'emergency_stop_fov_ratio': EnvironmentVariable('EMERGENCY_STOP_FOV_RATIO', default_value='0.2'),
             'scan_filter_window_size' : EnvironmentVariable('SCAN_FILTER_WINDOW_SIZE', default_value='5'),
-            'scan_topic' : EnvironmentVariable('SCAN_TOPIC', default_value='/scan')
+            'scan_topic' : EnvironmentVariable('SCAN_TOPIC', default_value='/scan'),
+            'reverse_speed' : EnvironmentVariable('REVERSE_SPEED', default_value='0.1'),
+            'reverse_time_period' : EnvironmentVariable('REVERSE_TIME_PERIOD', default_value='0.5'),
+            'numer_of_laps_per_mission' : EnvironmentVariable('NUMBER_OF_LAPS_PER_MISSION', default_value='1.0'),
+            'zone_entrance_time_period' : EnvironmentVariable('ZONE_ENTRANCE_TIME_PERIOD', default_value='1.0'),
+            
         }.items()
     )
 
@@ -147,20 +152,7 @@ def generate_launch_description():
     
     # # Static TF base_link -> mono_camera
     # # .15 0 .25 0 0 1.5707
-    cam_x = 0.0105 # 0.05
-    cam_y = 0.0
-    cam_z = -0.002 #0.15 
-    cam_roll = radians(-90.0)
-    cam_pitch = 0.0
-    cam_yaw = radians(-90.0)
-    cam_tf_node = Node(
-        package='tf2_ros',
-        name='base2depth_tf_node',
-        executable='static_transform_publisher',
-        # arguments=[str(cam_x), str(cam_y), str(cam_z), str(cam_yaw), str(cam_pitch), str(cam_roll), 'base_link', 'camera_link'],
-        arguments=[str(cam_x), str(cam_y), str(cam_z), str(cam_yaw), str(cam_pitch), str(cam_roll), 'camera_link', 'optical_camera_link'],
-        
-    )
+
 
     # # Static TF base_link -> lidar_link
     # # .15 0 .25 0 0 1.5707
@@ -178,7 +170,20 @@ def generate_launch_description():
     #     arguments=[str(lidar_x), str(lidar_y), str(lidar_z), str(lidar_yaw), str(lidar_pitch), str(lidar_roll), 'base_link', 'lidar_link'],
         
     # )
-    
+    cam_x = 0.0105 # 0.05
+    cam_y = 0.0
+    cam_z = -0.002 #0.15 
+    cam_roll = radians(-90.0)
+    cam_pitch = 0.0
+    cam_yaw = radians(-90.0)
+    cam_tf_node = Node(
+        package='tf2_ros',
+        name='base2depth_tf_node',
+        executable='static_transform_publisher',
+        # arguments=[str(cam_x), str(cam_y), str(cam_z), str(cam_yaw), str(cam_pitch), str(cam_roll), 'base_link', 'camera_link'],
+        arguments=[str(cam_x), str(cam_y), str(cam_z), str(cam_yaw), str(cam_pitch), str(cam_roll), 'camera_link', 'optical_camera_link'],
+        
+    )
 
     return LaunchDescription([
         robot_description,
@@ -192,3 +197,4 @@ def generate_launch_description():
         ftg_cpp_launch_include,
         car_controller_launch_include
     ])
+
