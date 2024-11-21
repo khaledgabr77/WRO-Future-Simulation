@@ -3,7 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from yolov8_msgs.msg import DetectionArray
-from std_msgs.msg import Float64, Bool
+from std_msgs.msg import Float64, Bool, Empty
 from time import time
 class LapCounterNode(Node):
     def __init__(self):
@@ -48,6 +48,12 @@ class LapCounterNode(Node):
             self.drive_callback,
             10)
         
+        self.create_subscription(
+            Empty,
+            '/lap_counter_reset',
+            self.state_machine_reset_callback,
+            10)
+        
         self.lap_counter_publisher = self.create_publisher(Float64, '/lap_counter', 10)
         self.line_entrance_publisher = self.create_publisher(Bool, '/line_in_entrance', 10)
 
@@ -55,6 +61,17 @@ class LapCounterNode(Node):
         # State machine loop
         # self.create_timer(0.02, self.state_machine_loop)
 
+    
+    def state_machine_reset_callback(self, msg):
+        self.get_logger().warn(f'Lap counting is RESET!')
+        self.reset_state_machine()
+        self.lap_counter = 0
+        self.section_counter = 0
+        self.line_entrance_publisher.publish(Bool(data=False))
+        self.START=True
+
+        return
+    
     def is_object_in_entrance(self) -> bool:
         '''
         1. check if there is detection
