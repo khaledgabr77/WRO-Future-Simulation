@@ -3,8 +3,8 @@
 import rclpy
 from rclpy.node import Node
 from yolov8_msgs.msg import DetectionArray
-from std_msgs.msg import Float64, Bool
-
+from std_msgs.msg import Float64, Bool, Empty
+from time import time
 class LapCounterNode(Node):
     def __init__(self):
         super().__init__('lap_counter_node')
@@ -27,6 +27,9 @@ class LapCounterNode(Node):
         self.lap_counter = 0
         self.sections_per_lap = 4
 
+        self.prev_det_time = time()
+        self.current_det_time = self.prev_det_time
+
         # Initialize states of state machine
         self.START = True
         self.WAITING_FOR_ENTRANCE = False
@@ -45,13 +48,30 @@ class LapCounterNode(Node):
             self.drive_callback,
             10)
         
+        self.create_subscription(
+            Empty,
+            '/lap_counter_reset',
+            self.state_machine_reset_callback,
+            10)
+        
         self.lap_counter_publisher = self.create_publisher(Float64, '/lap_counter', 10)
-        self.line_entrance_publisher = self.create_publisher(Bool, '/line_entrance', 10)
+        self.line_entrance_publisher = self.create_publisher(Bool, '/line_in_entrance', 10)
 
         
         # State machine loop
         # self.create_timer(0.02, self.state_machine_loop)
 
+    
+    def state_machine_reset_callback(self, msg):
+        self.get_logger().warn(f'Lap counting is RESET!')
+        self.reset_state_machine()
+        self.lap_counter = 0
+        self.section_counter = 0
+        self.line_entrance_publisher.publish(Bool(data=False))
+        self.START=True
+
+        return
+    
     def is_object_in_entrance(self) -> bool:
         '''
         1. check if there is detection
@@ -160,7 +180,7 @@ class LapCounterNode(Node):
     
     def state_machine_loop(self):
 
-        # self.is_line_in_entrance()
+        self.is_line_in_entrance()
 
         if self.START:
             self.START = False
@@ -213,6 +233,12 @@ class LapCounterNode(Node):
 
 
     def is_line_in_entrance(self):
+        
+        if (not (self.current_det_time > self.prev_det_time)):
+            self.line_entrance_publisher.publish(Bool(data=False))
+            return
+        else:
+            self.prev_det_time = self.current_det_time
         found_line = False
         det = None
         line_max_y = -999999
@@ -226,9 +252,18 @@ class LapCounterNode(Node):
                     det = detection
                     found_line = True
 
+        if not found_line:
+            self.line_entrance_publisher.publish(Bool(data=False))
+            return
+        
         if det is None:
             return
-        if (det.bbox.center.position.y - det.bbox.size.y/2) > (self.image_height/2+0.1*self.image_height):
+        # if (det.bbox.center.position.y - det.bbox.size.y/2) > (self.image_height/2+0.1*self.image_height):
+        in_entrance = (det.bbox.center.position.y ) > (self.image_height/5)
+        in_exit = (det.bbox.center.position.y ) < (self.image_height*(1-0.3))
+        # self.get_logger().info(f'Entrance {in_entrance}')
+        # self.get_logger().info(f'Exit {in_exit}')
+        if ( in_entrance and not in_exit):
             self.get_logger().info(f'line is in entrance')
             self.line_entrance_publisher.publish(Bool(data=True))
         else:
@@ -242,6 +277,7 @@ class LapCounterNode(Node):
 
     def detection_callback(self, msg: DetectionArray):
         self.detections_msg = msg
+        self.current_det_time = time()
         self.state_machine_loop()
       
 

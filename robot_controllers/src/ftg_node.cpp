@@ -7,10 +7,13 @@
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include "std_msgs/msg/float64.hpp"
+#include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/empty.hpp"
 
 #include <algorithm>
 #include <vector>
 #include <cmath>
+#include <chrono> // Include for working with system time
 
 class FollowTheGap : public rclcpp::Node
 {
@@ -44,6 +47,11 @@ public:
         this->declare_parameter<double>("disparity_threshold", 0.5); 
         this->declare_parameter<double>("disparity_width_ratio_from_car_width", 0.5);  // percentage
         this->declare_parameter<int>("scan_filter_window_size", 5);  // scan filter window size
+        this->declare_parameter<double>("reverse_speed", 0.2);
+        this->declare_parameter<double>("reverse_time_period", 0.2);
+        this->declare_parameter<double>("numer_of_laps_per_mission", 1.0);
+        this->declare_parameter<double>("zone_entrance_time_period", 0.2);
+        
 
 
         // Get parameters
@@ -71,6 +79,11 @@ public:
         disparity_threshold_ = this->get_parameter("disparity_threshold").as_double();
         disparity_width_ratio_from_car_width_ = this->get_parameter("disparity_width_ratio_from_car_width").as_double();
         scan_filter_window_size_ = static_cast<size_t>(this->get_parameter("scan_filter_window_size").as_int());
+        rev_time_period_ = this->get_parameter("reverse_time_period").as_double();
+        rev_speed_ = this->get_parameter("reverse_speed").as_double();
+        NUMBER_OF_LAPS_PER_MISSION = this->get_parameter("numer_of_laps_per_mission").as_double();
+        zone_entrance_time_period_ = this->get_parameter("zone_entrance_time_period").as_double();
+        
 
         // Initialize processed_scan_
         processed_scan_.header.frame_id = "lidar_frame"; // Update as per your frame
@@ -81,6 +94,16 @@ public:
         // Subscribers and Publishers
         scan_sub_ = this->create_subscription<sensor_msgs::msg::LaserScan>(
             "/scan", 10, std::bind(&FollowTheGap::scanCallback, this, std::placeholders::_1));
+
+        lap_count_sub_ = this->create_subscription<std_msgs::msg::Float64>(
+        "/lap_counter", 10, std::bind(&FollowTheGap::labCountCallback, this, std::placeholders::_1));
+
+        lin_in_entrance_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+        "/line_in_entrance", 10, std::bind(&FollowTheGap::lineEntranceCallback, this, std::placeholders::_1));
+        
+        state_machine_sub_ = this->create_subscription<std_msgs::msg::Bool>(
+        "/state_machine_command", 10, std::bind(&FollowTheGap::stateMachineCallback, this, std::placeholders::_1));
+        
 
         // Publishers for the steer angle and wheel speed
         steer_angle_pub_ = this->create_publisher<std_msgs::msg::Float64>("/steer_angle", 10);
@@ -105,6 +128,10 @@ public:
         // Publisher for best gap points
         best_gap_points_pub_ = this->create_publisher<visualization_msgs::msg::Marker>(
             "/best_gap_points", 10);
+
+            // Publisher for best gap points
+        lap_counting_reset_pub_ = this->create_publisher<std_msgs::msg::Empty>(
+            "/lap_counter_reset", 10);
 
         RCLCPP_INFO(this->get_logger(), "FollowTheGap node initialized");
     }
@@ -135,12 +162,44 @@ private:
     double disparity_threshold_;
     double disparity_width_ratio_from_car_width_;
     size_t scan_filter_window_size_;
+    double current_steering_angle_;
+
+    // State of the state machine
+    bool RUN_STATE_MACHINE = false;
+    bool START_STATE = false;
+    bool FTG_STATE = false;
+    bool ZONE_ENTRANCE_STATE = false;
+    bool WAIT_FOR_PARK_STATE = false;
+    bool PARTK_STATE = false;
+    bool END_STATE = false;
+    // bool DRIVE_BACKWARD_STATE = false;
+
+    // Variables for the driveBackward() function
+    double rev_start_time_ = 0.0;
+    double rev_current_time_ = 0.0;
+    double rev_speed_ = 0.2; // TODO make a parameter
+    double rev_time_period_ = 0.5; // seconds. TODO make a parameter
+
+    // Zone entrance times
+    double zone_current_time_  = 0.0;
+    double zone_start_time_ = 0.0 ;
+    double zone_entrance_time_period_ = 0.3;
+
+    // lap counting variables
+    bool is_line_in_entrance_ = false;
+    double lap_count_ = 0.0;
+    double NUMBER_OF_LAPS_PER_MISSION = 1.0; // TODO make a parameter
 
     // Processed LaserScan
     sensor_msgs::msg::LaserScan processed_scan_;
+    // sensor_msgs::msg::LaserScan raw_scan_;
 
     // Subscribers and Publishers
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
+    
+    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr lap_count_sub_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr lin_in_entrance_sub_;
+    rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr state_machine_sub_;
 
     // Publishers for the steer angle and wheel speed
     rclcpp::Publisher<std_msgs::msg::Float64>::SharedPtr steer_angle_pub_;
@@ -161,24 +220,204 @@ private:
     // Publisher for best gap points
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr best_gap_points_pub_;
 
+    // Lap counting reset publisher
+    rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr lap_counting_reset_pub_;
+
     // Previous steering angle for smoothing
     float previous_steering_angle_;
 
+    
     void scanCallback(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
     {
-        RCLCPP_DEBUG(this->get_logger(), "Received LaserScan message");
+        stateMachineLoop(scan_msg);
+    }
 
-        // Start timing
-        auto start_time = this->now();
+    void labCountCallback(const std_msgs::msg::Float64::SharedPtr msg)
+    {
+        lap_count_ = msg->data;
+    }
 
-        // Step 0: Emergency Stop
+    void lineEntranceCallback(const std_msgs::msg::Bool::SharedPtr msg)
+    {
+        is_line_in_entrance_ = msg->data;
+    }
+
+    void stateMachineCallback(const std_msgs::msg::Bool::SharedPtr msg)
+    {
+        RUN_STATE_MACHINE = msg->data;
+        if (RUN_STATE_MACHINE)
+        {
+            if( ! START_STATE )
+            {
+                resetStates();
+                START_STATE = true;
+            }
+
+        }
+    }
+
+    void stateMachineLoop(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
+    {
+        
+        if (! RUN_STATE_MACHINE)
+        {
+            RCLCPP_WARN(this->get_logger(), "State machine is not running. Publish to the /state_machine_command topic to start");
+            publishDriveCommand(0.0, 0.0);
+            resetStates();
+            lap_count_ = 0;
+            is_line_in_entrance_ = false;
+            return;
+        }
+        
         if ( isEmergencyStop(scan_msg) )
         {
             if (publish_speed_) publishDriveCommand(0.0, 0.0);
+            rev_start_time_ = getCurrentTimeInSeconds();
+            driveBackward();
+            return;
+        }
+        
+        if (START_STATE)
+        {
+            executeStart();
+        }
+
+        else if (FTG_STATE)
+        {
+            executeFTG(scan_msg);
+        }
+
+        else if (ZONE_ENTRANCE_STATE)
+        {
+            executeZoneEntrance(scan_msg);
+        }
+
+        else if (WAIT_FOR_PARK_STATE)
+        {
+            executeWaitForPark();
+        }
+
+        else if (PARTK_STATE)
+        {
+            executePark();
+        }
+
+        else if (END_STATE)
+        {
+            executeEnd();
+        }
+
+        else
+        {
+            RCLCPP_ERROR(this->get_logger(), "Unkown state!");    
+        }
+
+        return;
+    }
+    
+    void resetStates(void)
+    {
+        START_STATE = false;
+        FTG_STATE = false;
+        ZONE_ENTRANCE_STATE = false;
+        WAIT_FOR_PARK_STATE = false;
+        PARTK_STATE = false;
+        END_STATE = false;
+    }
+
+    void executeStart()
+    {
+        RCLCPP_INFO(this->get_logger(), "In START_STATE");
+        resetStates();
+        FTG_STATE = true;
+        std_msgs::msg::Empty empty_msg;
+        lap_counting_reset_pub_->publish(empty_msg);
+        RCLCPP_INFO(this->get_logger(), "Going from START_STATE -> FTG_STATE");
+    }
+    
+    
+
+    void executeFTG(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
+    {
+        RCLCPP_INFO(this->get_logger(), "In FTG_STATE");
+        if ( areLapsCompleted() )
+        {
+            resetStates();
+            RCLCPP_INFO(this->get_logger(), "Going from FTG_STATE -> WAIT_FOR_PARK_STATE");
+            zone_start_time_ = getCurrentTimeInSeconds();
+            ZONE_ENTRANCE_STATE = true;
+
             return;
         }
 
+        followTheGap(scan_msg);
+
+        return;        
+    }
+
+    void executeZoneEntrance(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
+    {
         
+        RCLCPP_INFO(this->get_logger(), "In ZONE_ENTRANCE_STATE");
+        
+        if (!inZone()) // need to wait
+        {
+            followTheGap(scan_msg);
+            return;
+        }  
+        
+        // Otherwise, done, and proceed to next state
+        resetStates();
+        WAIT_FOR_PARK_STATE = true;
+        RCLCPP_INFO(this->get_logger(), "Going from ZONE_ENTRANCE_STATE -> WAIT_FOR_PARK_STATE");
+    }
+
+    void executeWaitForPark()
+    {
+        RCLCPP_INFO(this->get_logger(), "In WAIT_FOR_PARK_STATE");
+        // TODO Implement
+        if ( isParkFound() )
+        {
+            resetStates();
+            RCLCPP_INFO(this->get_logger(), "Found parking. Going from WAIT_FOR_PARK_STATE -> PARTK_STATE");
+            PARTK_STATE = true;
+        }
+        else{
+            resetStates();
+            RCLCPP_INFO(this->get_logger(), "Did NOT find parking. Going from WAIT_FOR_PARK_STATE -> END_STATE");
+            END_STATE = true;
+        }
+
+        return;
+    }
+
+    void executePark()
+    {
+        RCLCPP_INFO(this->get_logger(), "In PARK_STATE");
+        // TODO Implement
+        
+        // WARNING Just going to END_STATE for now
+        resetStates();
+        RCLCPP_INFO(this->get_logger(), "Going from PARK_STATE -> END_STATE");
+        END_STATE = true;
+    }
+
+    void executeEnd()
+    {
+        RCLCPP_INFO(this->get_logger(), "In the END_STATE");
+        resetStates();
+        RCLCPP_INFO(this->get_logger(), "Mission is completed. Stopping the state machine.");
+        RUN_STATE_MACHINE = false;
+
+        return;
+    }
+
+    
+    void followTheGap(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
+    {
+        // Start timing
+        auto start_time = this->now();
+
         // Step 1: Preprocess the LiDAR data and limit the field of view
         RCLCPP_DEBUG(this->get_logger(), "Step 1: Preprocessing LiDAR data");
         preprocessLidar(scan_msg);
@@ -244,6 +483,7 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Step 7: Computing steering angle and speed");
         float steering_angle = calculateSteeringAngle(best_point_idx);
         float speed = computeSpeed();
+        current_steering_angle_ = steering_angle;
 
         RCLCPP_INFO(this->get_logger(), "Steering Angle: %.3f radians, Speed: %.3f m/s", steering_angle, speed);
 
@@ -261,6 +501,8 @@ private:
         auto end_time_final = this->now();
         auto duration_final = end_time_final - start_time;
         RCLCPP_INFO(this->get_logger(), "Execution Time: %.6f seconds", duration_final.seconds());
+
+        return;
     }
 
     bool isEmergencyStop(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
@@ -402,77 +644,6 @@ private:
         RCLCPP_DEBUG(this->get_logger(), "Number of ranges after preprocessing: %zu", processed_scan_.ranges.size());
     }
 
-    
-    // void preprocessLidar(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
-    // {
-    //     // Limit the field of view
-    //     double fov_rad = (field_of_view_ * M_PI) / 180.0; // Convert FOV to radians
-    //     double half_fov = fov_rad / 2.0;
-
-    //     // Calculate desired angle range based on original scan's angle_min
-    //     double desired_angle_min = scan_msg->angle_min + (scan_msg->angle_max - scan_msg->angle_min - fov_rad) / 2.0;
-    //     double desired_angle_max = desired_angle_min + fov_rad;
-
-    //     // Ensure desired angles are within the original scan's range
-    //     if (desired_angle_min < scan_msg->angle_min)
-    //         desired_angle_min = scan_msg->angle_min;
-
-    //     if (desired_angle_max > scan_msg->angle_max)
-    //         desired_angle_max = scan_msg->angle_max;
-
-    //     double angle_increment = scan_msg->angle_increment;
-
-    //     // Calculate start and end indices based on desired FOV
-    //     int start_idx = static_cast<int>((desired_angle_min - scan_msg->angle_min) / angle_increment);
-    //     int end_idx = static_cast<int>((desired_angle_max - scan_msg->angle_min) / angle_increment);
-
-    //     // Clamp indices to valid range
-    //     start_idx = std::max(0, start_idx);
-    //     end_idx = std::min(static_cast<int>(scan_msg->ranges.size()) - 1, end_idx);
-
-    //     // Extract the limited FOV ranges
-    //     std::vector<float> limited_ranges(scan_msg->ranges.begin() + start_idx, scan_msg->ranges.begin() + end_idx + 1);
-
-    //     std::vector<float> limited_intensities;
-    //     if (scan_msg->intensities.size() >= scan_msg->ranges.size())
-    //     {
-    //         limited_intensities.assign(scan_msg->intensities.begin() + start_idx, scan_msg->intensities.begin() + end_idx + 1);
-    //     }
-    //     else
-    //     {
-    //         // If intensities are not available or not matching ranges size, fill with zeros
-    //         limited_intensities.assign(limited_ranges.size(), 0.0f);
-    //     }
-
-    //     // Remove NaNs and infs, cap ranges at max_range_
-    //     float max_range = static_cast<float>(max_range_);
-    //     for (float &range : limited_ranges)
-    //     {
-    //         if (std::isnan(range)) range = 0.0f;
-    //         if (std::isinf(range)) range = max_range;
-    //         if (range > max_range) range = max_range;; // clipping
-                
-    //     }
-
-    //     // Update processed_scan_
-    //     processed_scan_.header = scan_msg->header;
-    //     processed_scan_.angle_min = scan_msg->angle_min + (start_idx * angle_increment);
-    //     processed_scan_.angle_max = scan_msg->angle_min + (end_idx * angle_increment);
-    //     processed_scan_.angle_increment = angle_increment;
-    //     processed_scan_.time_increment = scan_msg->time_increment;
-    //     processed_scan_.scan_time = scan_msg->scan_time;
-    //     processed_scan_.range_min = scan_msg->range_min;
-    //     processed_scan_.range_max = scan_msg->range_max;
-    //     processed_scan_.ranges = limited_ranges;
-    //     processed_scan_.intensities = limited_intensities;
-
-    //     // Debugging: Log the adjusted angles
-    //     RCLCPP_DEBUG(this->get_logger(), "Preprocessed LiDAR:");
-    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Min: %.4f radians", processed_scan_.angle_min);
-    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Max: %.4f radians", processed_scan_.angle_max);
-    //     RCLCPP_DEBUG(this->get_logger(), "Adjusted Angle Increment: %.6f radians", processed_scan_.angle_increment);
-    //     RCLCPP_DEBUG(this->get_logger(), "Number of ranges after preprocessing: %zu", processed_scan_.ranges.size());
-    // }
 
     
     void processIntensities()
@@ -498,7 +669,7 @@ private:
             // label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
             //int int_intensity = static_cast<int>(intensity); // From float to int
 
-            if ((intensity == 1.0 || intensity == 2.0 || intensity == 3.0) )
+            if ((intensity == 2.0 || intensity == 4.0 || intensity == 5.0) )
             {
                 if (range < min_range)
                 {
@@ -516,7 +687,7 @@ private:
 
             // Modify the ranges based on the label
             // label == 1 -> green, label == 2 --> parking color(pink), label == 3 --> red
-            if (label == 1.0)
+            if (label == 2.0)
             {
                 // Green object: modify ranges on the right
                 for (size_t i = 0; i < closest_idx; ++i)
@@ -524,7 +695,7 @@ private:
                     processed_scan_.ranges[i] = 0.0; //min_range;
                 }
             }
-            else if (label == 3.0)
+            else if (label == 5.0)
             {
                 // Red object: modify ranges on the left
                 for (size_t i = closest_idx + 1; i < processed_scan_.ranges.size(); ++i)
@@ -634,7 +805,7 @@ private:
 
             float range_diff = std::abs(r2 - r1);
 
-            if (range_diff > disparity_threshold_) // TODO: Make this a parameter (e.g., declare_parameter)
+            if (range_diff > disparity_threshold_)
             {
                 // Calculate the number of points to extend
                 float min_range = std::min(r1, r2);
@@ -1050,10 +1221,10 @@ private:
             speed = static_cast<float>(min_speed_ + (max_speed_ - min_speed_) * ((min_range - speed_safety_radius_) / (max_range_ - speed_safety_radius_)));
             speed = std::min(speed, static_cast<float>(max_speed_));
         }
-        else
-        {
-            speed = 0.0f; // Stop if obstacle is too close
-        }
+        // else
+        // {
+        //     speed = 0.0f; // Stop if obstacle is too close
+        // }
 
         return speed;
     }
@@ -1213,6 +1384,53 @@ private:
 
         // Debugging: Log the number of points published
         RCLCPP_DEBUG(this->get_logger(), "Published %zu best gap points", points.points.size());
+    }
+    
+    
+    // Function to get the current time in decimal seconds
+    double getCurrentTimeInSeconds()
+    {
+        return std::chrono::duration<double>(
+                   std::chrono::system_clock::now().time_since_epoch())
+            .count();
+    }
+
+    // Reverse function
+    // published fixed (low) speed and 0 steering angle to allow the robot to recover from an emergency stop
+    void driveBackward(void)
+    {
+        rev_current_time_ = getCurrentTimeInSeconds();
+        rev_start_time_ = getCurrentTimeInSeconds();
+        RCLCPP_INFO(this->get_logger(), "Driving backward");
+        while( (rev_current_time_ - rev_start_time_) < rev_time_period_ )
+        {
+            publishDriveCommand(-current_steering_angle_, -rev_speed_);
+            rev_current_time_ = getCurrentTimeInSeconds();
+        }
+        RCLCPP_INFO(this->get_logger(), "DONE driving backward");
+        publishDriveCommand(0.0, 0.0);
+        return;
+    }
+    
+    bool areLapsCompleted(void)
+    {
+        if (lap_count_ == NUMBER_OF_LAPS_PER_MISSION && is_line_in_entrance_) return true;
+        return false;
+    }
+    bool inZone()
+    {
+        zone_current_time_ = getCurrentTimeInSeconds();
+        if (zone_current_time_ - zone_start_time_ < zone_entrance_time_period_ )
+        {
+            return false;
+        }
+        return true;
+    }
+
+    bool isParkFound()
+    {
+        // TODO Implement
+        return false;
     }
 };
 
