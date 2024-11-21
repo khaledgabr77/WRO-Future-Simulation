@@ -73,7 +73,8 @@ def generate_launch_description():
         enable_disparity_extender_arg, enable_corner_case_arg, use_labeled_scan_arg, publish_speed_arg,
         discontinuity_threshold_arg, disparity_width_ratio_from_car_width_arg, safety_angle_degrees_arg,
         max_sub_window_size_arg, sub_window_step_arg, best_point_conv_size_arg, disparity_threshold_arg,
-        emergency_stop_distance_arg, emergency_stop_fov_ratio_arg, scan_filter_window_size_arg, scan_topic_arg,
+        emergency_stop_distance_arg, emergency_stop_fov_ratio_arg, scan_filter_window_size_arg, 
+        scan_topic_arg, reverse_speed_arg, reverse_time_period_arg, numer_of_laps_per_mission_arg,
 
         # Launch the node with parameters
         Node(
