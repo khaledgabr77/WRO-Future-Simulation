@@ -32,7 +32,9 @@ def generate_launch_description():
     emergency_stop_fov_ratio_arg = DeclareLaunchArgument('emergency_stop_fov_ratio', default_value='0.2', description='Emergency stop FOV ratio')
     scan_filter_window_size_arg = DeclareLaunchArgument('scan_filter_window_size', default_value='5', description='Scan filter window size')
     scan_topic_arg = DeclareLaunchArgument('scan_topic', default_value='/scan', description='Scan topic name')
-    
+    reverse_speed_arg = DeclareLaunchArgument('reverse_speed', default_value='0.2', description='Reverse speed')
+    reverse_time_period_arg = DeclareLaunchArgument('reverse_time_period', default_value='0.2', description='Reverse time period')
+    numer_of_laps_per_mission_arg = DeclareLaunchArgument('numer_of_laps_per_mission', default_value='1.0', description='numer_of_laps_per_mission')
 
     # Fetch the configurations for each parameter
     wheel_base = LaunchConfiguration('wheel_base')
@@ -60,6 +62,9 @@ def generate_launch_description():
     emergency_stop_fov_ratio = LaunchConfiguration('emergency_stop_fov_ratio')
     scan_filter_window_size = LaunchConfiguration('scan_filter_window_size')
     scan_topic = LaunchConfiguration('scan_topic')
+    reverse_speed = LaunchConfiguration('reverse_speed')
+    reverse_time_period = LaunchConfiguration('reverse_time_period')
+    numer_of_laps_per_mission = LaunchConfiguration('numer_of_laps_per_mission')
 
     return LaunchDescription([
         # Add all DeclareLaunchArgument instances
@@ -100,7 +105,10 @@ def generate_launch_description():
                 {'disparity_threshold': disparity_threshold},
                 {'emergency_stop_distance': emergency_stop_distance},
                 {'emergency_stop_fov_ratio': emergency_stop_fov_ratio},
-                {'scan_filter_window_size': scan_filter_window_size}
+                {'scan_filter_window_size': scan_filter_window_size},
+                {'reverse_speed' : reverse_speed},
+                {'reverse_time_period': reverse_time_period},
+                {'numer_of_laps_per_mission': numer_of_laps_per_mission}
             ],
             remappings=[
                ('/scan', scan_topic),

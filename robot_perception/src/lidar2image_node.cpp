@@ -190,7 +190,7 @@ void Lidar2ImageNode::detection_image_scan_callback(
     {
         int class_id = detection.class_id;
 
-        if (class_id == 1 || class_id == 2 || class_id == 3)
+        if (class_id == 2 || class_id == 4 || class_id == 5)
         {
             auto bbox = detection.bbox;
             int image_width = image_msg->width;
@@ -208,17 +208,17 @@ void Lidar2ImageNode::detection_image_scan_callback(
 
             cv::Scalar color;
             std::string label_text;
-            if (class_id == 1)
+            if (class_id == 2)
             {
                 color = cv::Scalar(0, 255, 0); // Green
                 label_text = "Green";
             }
-            else if (class_id == 2)
+            else if (class_id == 4)
             {
                 color = cv::Scalar(203, 192, 255); // Pink
                 label_text = "Parking";
             }
-            else if (class_id == 3)
+            else if (class_id == 5)
             {
                 color = cv::Scalar(0, 0, 255); // Red
                 label_text = "Red";
@@ -238,15 +238,15 @@ void Lidar2ImageNode::detection_image_scan_callback(
     for (size_t i = 0; i < u.size(); ++i)
     {
         cv::Scalar color;
-        if (labels[i] == 1)
+        if (labels[i] == 2)
         {
             color = cv::Scalar(0, 255, 0); // Green
         }
-        else if (labels[i] == 2)
+        else if (labels[i] == 4)
         {
             color = cv::Scalar(203, 192, 255); // Pink
         }
-        else if (labels[i] == 3)
+        else if (labels[i] == 5)
         {
             color = cv::Scalar(0, 0, 255); // Red
         }
@@ -395,7 +395,7 @@ void Lidar2ImageNode::associate_points_with_detections(
     {
         int class_id = detection.class_id;
 
-        if (class_id == 1 || class_id == 2 || class_id == 3)
+        if (class_id == 2 || class_id == 4 || class_id == 5)
         {
             auto bbox = detection.bbox;
             int image_width = image_msg->width;

@@ -18,7 +18,7 @@ def generate_launch_description():
     # YOLO
     yolo_model_arg = DeclareLaunchArgument(
         'yolo_model',
-        default_value='/home/d2d/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.mix.yolov11n.seg.engine',
+        default_value='/home/d2d/shared_volume/ros2_ws/src/WRO-Future-Simulation/robot_perception/yolo_models/wro.with_lines.2.v11.seg.engine',
         description='Path to YOLO model'
     )
     yolo_model = LaunchConfiguration('yolo_model')
