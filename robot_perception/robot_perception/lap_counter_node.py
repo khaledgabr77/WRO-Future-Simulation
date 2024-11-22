@@ -55,6 +55,7 @@ class LapCounterNode(Node):
             10)
         
         self.lap_counter_publisher = self.create_publisher(Float64, '/lap_counter', 10)
+        self.section_counter_publisher = self.create_publisher(Float64, '/section_counter', 10)
         self.line_entrance_publisher = self.create_publisher(Bool, '/line_in_entrance', 10)
 
         
@@ -230,6 +231,7 @@ class LapCounterNode(Node):
             return
 
         self.lap_counter_publisher.publish(Float64(data=float(self.lap_counter)))
+        self.section_counter_publisher.publish(Float64(data=float(self.section_counter)))
 
 
     def is_line_in_entrance(self):
