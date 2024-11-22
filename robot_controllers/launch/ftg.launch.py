@@ -36,6 +36,10 @@ def generate_launch_description():
     reverse_time_period_arg = DeclareLaunchArgument('reverse_time_period', default_value='0.2', description='Reverse time period')
     numer_of_laps_per_mission_arg = DeclareLaunchArgument('numer_of_laps_per_mission', default_value='1.0', description='numer_of_laps_per_mission')
     zone_entrance_time_period_arg = DeclareLaunchArgument('zone_entrance_time_period', default_value='2.0', description='zone_entrance_time_period')
+    min_parking_length_arg = DeclareLaunchArgument('min_parking_length', default_value='0.15', description='min_parking_length in meters')
+    activate_parking_arg = DeclareLaunchArgument('activate_parking', default_value='false', description='activate_parking true/false')
+    numer_of_sections_per_lap_arg = DeclareLaunchArgument('numer_of_sections_per_lap', default_value='4.0', description='numer_of_sections_per_lap')
+    
     
     # Fetch the configurations for each parameter
     wheel_base = LaunchConfiguration('wheel_base')
@@ -67,6 +71,10 @@ def generate_launch_description():
     reverse_time_period = LaunchConfiguration('reverse_time_period')
     numer_of_laps_per_mission = LaunchConfiguration('numer_of_laps_per_mission')
     zone_entrance_time_period = LaunchConfiguration('zone_entrance_time_period')
+    min_parking_length = LaunchConfiguration('min_parking_length')
+    activate_parking = LaunchConfiguration('activate_parking')
+    numer_of_sections_per_lap = LaunchConfiguration('numer_of_sections_per_lap')
+    
 
     return LaunchDescription([
         # Add all DeclareLaunchArgument instances
@@ -77,6 +85,7 @@ def generate_launch_description():
         max_sub_window_size_arg, sub_window_step_arg, best_point_conv_size_arg, disparity_threshold_arg,
         emergency_stop_distance_arg, emergency_stop_fov_ratio_arg, scan_filter_window_size_arg, 
         scan_topic_arg, reverse_speed_arg, reverse_time_period_arg, numer_of_laps_per_mission_arg, zone_entrance_time_period_arg,
+        min_parking_length_arg, activate_parking_arg, numer_of_sections_per_lap_arg,
 
         # Launch the node with parameters
         Node(
@@ -112,7 +121,10 @@ def generate_launch_description():
                 {'reverse_speed' : reverse_speed},
                 {'reverse_time_period': reverse_time_period},
                 {'numer_of_laps_per_mission': numer_of_laps_per_mission},
-                {'zone_entrance_time_period': zone_entrance_time_period}
+                {'zone_entrance_time_period': zone_entrance_time_period},
+                {'min_parking_length': min_parking_length},
+                {'activate_parking': activate_parking},
+                {'numer_of_sections_per_lap': numer_of_sections_per_lap},
             ],
             remappings=[
                ('/scan', scan_topic),
