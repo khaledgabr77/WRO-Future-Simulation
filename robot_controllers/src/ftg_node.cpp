@@ -50,8 +50,10 @@ public:
         this->declare_parameter<double>("reverse_speed", 0.2);
         this->declare_parameter<double>("reverse_time_period", 0.2);
         this->declare_parameter<double>("numer_of_laps_per_mission", 1.0);
+        this->declare_parameter<double>("numer_of_sections_per_lap", 4.0);
         this->declare_parameter<double>("zone_entrance_time_period", 0.2);
-        
+        this->declare_parameter<double>("min_parking_length", 0.2); //meters
+        this->declare_parameter<bool>("activate_parking", false); // skips zone entrance state, to do parking whenever seen at the end
 
 
         // Get parameters
@@ -83,8 +85,11 @@ public:
         rev_speed_ = this->get_parameter("reverse_speed").as_double();
         NUMBER_OF_LAPS_PER_MISSION = this->get_parameter("numer_of_laps_per_mission").as_double();
         zone_entrance_time_period_ = this->get_parameter("zone_entrance_time_period").as_double();
+        min_parking_length_ = this->get_parameter("zone_entrance_time_period").as_double();
+        activate_parking_ = this->get_parameter("activate_parking").as_bool();
+        numer_of_sections_per_lap_ = this->get_parameter("numer_of_sections_per_lap").as_double();
         
-
+        
         // Initialize processed_scan_
         processed_scan_.header.frame_id = "lidar_frame"; // Update as per your frame
         processed_scan_.range_min = 0.0; // Will be set based on original scan
@@ -97,6 +102,9 @@ public:
 
         lap_count_sub_ = this->create_subscription<std_msgs::msg::Float64>(
         "/lap_counter", 10, std::bind(&FollowTheGap::labCountCallback, this, std::placeholders::_1));
+
+        section_count_sub_ = this->create_subscription<std_msgs::msg::Float64>(
+        "/section_counter", 10, std::bind(&FollowTheGap::sectionCountCallback, this, std::placeholders::_1));
 
         lin_in_entrance_sub_ = this->create_subscription<std_msgs::msg::Bool>(
         "/line_in_entrance", 10, std::bind(&FollowTheGap::lineEntranceCallback, this, std::placeholders::_1));
@@ -163,6 +171,14 @@ private:
     double disparity_width_ratio_from_car_width_;
     size_t scan_filter_window_size_;
     double current_steering_angle_;
+    double min_parking_length_;
+    bool activate_parking_;
+    double numer_of_sections_per_lap_;
+
+    // Indicies of start/end laser ranges corresponding to parking slot
+    size_t parking_start_idx_ ;
+    size_t parking_end_idx_ ;
+    double parking_legnth_; // size of parking gap in meters
 
     // State of the state machine
     bool RUN_STATE_MACHINE = false;
@@ -177,18 +193,19 @@ private:
     // Variables for the driveBackward() function
     double rev_start_time_ = 0.0;
     double rev_current_time_ = 0.0;
-    double rev_speed_ = 0.2; // TODO make a parameter
-    double rev_time_period_ = 0.5; // seconds. TODO make a parameter
+    double rev_speed_ ;
+    double rev_time_period_; // seconds. TODO make a parameter
 
     // Zone entrance times
     double zone_current_time_  = 0.0;
     double zone_start_time_ = 0.0 ;
-    double zone_entrance_time_period_ = 0.3;
+    double zone_entrance_time_period_ ;
 
     // lap counting variables
     bool is_line_in_entrance_ = false;
     double lap_count_ = 0.0;
-    double NUMBER_OF_LAPS_PER_MISSION = 1.0; // TODO make a parameter
+    double section_count_ = 0.0;
+    double NUMBER_OF_LAPS_PER_MISSION;
 
     // Processed LaserScan
     sensor_msgs::msg::LaserScan processed_scan_;
@@ -198,6 +215,7 @@ private:
     rclcpp::Subscription<sensor_msgs::msg::LaserScan>::SharedPtr scan_sub_;
     
     rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr lap_count_sub_;
+    rclcpp::Subscription<std_msgs::msg::Float64>::SharedPtr section_count_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr lin_in_entrance_sub_;
     rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr state_machine_sub_;
 
@@ -236,6 +254,10 @@ private:
     {
         lap_count_ = msg->data;
     }
+    void sectionCountCallback(const std_msgs::msg::Float64::SharedPtr msg)
+    {
+        section_count_ = msg->data;
+    }
 
     void lineEntranceCallback(const std_msgs::msg::Bool::SharedPtr msg)
     {
@@ -254,6 +276,14 @@ private:
             }
 
         }
+        else
+        {
+            resetStates();
+            lap_count_ = 0.0;
+            section_count_ = 0.0;
+            std_msgs::msg::Empty empty_msg;
+            lap_counting_reset_pub_->publish(empty_msg);
+        }
     }
 
     void stateMachineLoop(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
@@ -261,7 +291,8 @@ private:
         
         if (! RUN_STATE_MACHINE)
         {
-            RCLCPP_WARN(this->get_logger(), "State machine is not running. Publish to the /state_machine_command topic to start");
+             RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "State machine is not running. Publish to the /state_machine_command topic to start");
             publishDriveCommand(0.0, 0.0);
             resetStates();
             lap_count_ = 0;
@@ -294,7 +325,7 @@ private:
 
         else if (WAIT_FOR_PARK_STATE)
         {
-            executeWaitForPark();
+            executeWaitForPark(scan_msg);
         }
 
         else if (PARTK_STATE)
@@ -327,25 +358,45 @@ private:
 
     void executeStart()
     {
-        RCLCPP_INFO(this->get_logger(), "In START_STATE");
+        // RCLCPP_INFO(this->get_logger(), "In START_STATE");
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "In START_STATE");
         resetStates();
         FTG_STATE = true;
         std_msgs::msg::Empty empty_msg;
         lap_counting_reset_pub_->publish(empty_msg);
-        RCLCPP_INFO(this->get_logger(), "Going from START_STATE -> FTG_STATE");
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "Going from START_STATE -> FTG_STATE");
     }
     
     
 
     void executeFTG(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
     {
-        RCLCPP_INFO(this->get_logger(), "In FTG_STATE");
-        if ( areLapsCompleted() )
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "In FTG_STATE");
+        if (activate_parking_)
+        {
+            if (section_count_ >= ((NUMBER_OF_LAPS_PER_MISSION*numer_of_sections_per_lap_) - 2))
+            {
+                resetStates();
+                RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                                "Going from FTG_STATE -> ZONE_ENTRANCE_STATE");
+                zone_start_time_ = getCurrentTimeInSeconds();
+                ZONE_ENTRANCE_STATE = true;
+
+                return;
+            }
+        }
+        
+        else if ( areLapsCompleted() )
         {
             resetStates();
-            RCLCPP_INFO(this->get_logger(), "Going from FTG_STATE -> WAIT_FOR_PARK_STATE");
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "Going from FTG_STATE -> ZONE_ENTRANCE_STATE");
             zone_start_time_ = getCurrentTimeInSeconds();
             ZONE_ENTRANCE_STATE = true;
+            // stopRobot();
 
             return;
         }
@@ -358,9 +409,21 @@ private:
     void executeZoneEntrance(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
     {
         
-        RCLCPP_INFO(this->get_logger(), "In ZONE_ENTRANCE_STATE");
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "In ZONE_ENTRANCE_STATE");
         
-        if (!inZone()) // need to wait
+        if (activate_parking_)
+        {
+            resetStates();
+            WAIT_FOR_PARK_STATE = true;
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                                "Parking is activated. Not executing ZONE_ENTRANCE_STATE ");
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                                "Going from ZONE_ENTRANCE_STATE -> WAIT_FOR_PARK_STATE");
+            return;   
+        }
+        
+        if ( !inZone() ) // need to wait
         {
             followTheGap(scan_msg);
             return;
@@ -369,23 +432,39 @@ private:
         // Otherwise, done, and proceed to next state
         resetStates();
         WAIT_FOR_PARK_STATE = true;
-        RCLCPP_INFO(this->get_logger(), "Going from ZONE_ENTRANCE_STATE -> WAIT_FOR_PARK_STATE");
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "Going from ZONE_ENTRANCE_STATE -> WAIT_FOR_PARK_STATE");
     }
 
-    void executeWaitForPark()
+    void executeWaitForPark(const sensor_msgs::msg::LaserScan::SharedPtr scan_msg)
     {
-        RCLCPP_INFO(this->get_logger(), "In WAIT_FOR_PARK_STATE");
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "In WAIT_FOR_PARK_STATE");
+
+        preprocessLidar(scan_msg);
         // TODO Implement
-        if ( isParkFound() )
+        if ( isParkingFound() )
         {
             resetStates();
-            RCLCPP_INFO(this->get_logger(), "Found parking. Going from WAIT_FOR_PARK_STATE -> PARTK_STATE");
+            RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "Found parking. Going from WAIT_FOR_PARK_STATE -> PARTK_STATE");
             PARTK_STATE = true;
+            stopRobot();
         }
-        else{
-            resetStates();
-            RCLCPP_INFO(this->get_logger(), "Did NOT find parking. Going from WAIT_FOR_PARK_STATE -> END_STATE");
-            END_STATE = true;
+        else
+        {
+            if (areLapsCompleted())
+            {
+                resetStates();
+                RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                                "Did NOT find parking. Going from WAIT_FOR_PARK_STATE -> END_STATE");
+                END_STATE = true;
+            }
+            else
+            {
+                followTheGap(scan_msg);
+            }
+            
         }
 
         return;
@@ -398,15 +477,18 @@ private:
         
         // WARNING Just going to END_STATE for now
         resetStates();
-        RCLCPP_INFO(this->get_logger(), "Going from PARK_STATE -> END_STATE");
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "Going from PARK_STATE -> END_STATE");
         END_STATE = true;
     }
 
     void executeEnd()
     {
-        RCLCPP_INFO(this->get_logger(), "In the END_STATE");
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "In the END_STATE");
         resetStates();
-        RCLCPP_INFO(this->get_logger(), "Mission is completed. Stopping the state machine.");
+        RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+                             "Mission is completed. Stopping the state machine.");
         RUN_STATE_MACHINE = false;
 
         return;
@@ -468,7 +550,7 @@ private:
             // End timing
             auto end_time = this->now();
             auto duration = end_time - start_time;
-            RCLCPP_INFO(this->get_logger(), "Execution Time: %.6f seconds", duration.seconds());
+            // RCLCPP_INFO(this->get_logger(), "Execution Time: %.6f seconds", duration.seconds());
 
             return;
         }
@@ -485,7 +567,7 @@ private:
         float speed = computeSpeed();
         current_steering_angle_ = steering_angle;
 
-        RCLCPP_INFO(this->get_logger(), "Steering Angle: %.3f radians, Speed: %.3f m/s", steering_angle, speed);
+        // RCLCPP_INFO(this->get_logger(), "Steering Angle: %.3f radians, Speed: %.3f m/s", steering_angle, speed);
 
         // Step 8: Publish drive command
         if (publish_speed_)
@@ -500,7 +582,9 @@ private:
         // End timing
         auto end_time_final = this->now();
         auto duration_final = end_time_final - start_time;
-        RCLCPP_INFO(this->get_logger(), "Execution Time: %.6f seconds", duration_final.seconds());
+        // RCLCPP_INFO(this->get_logger(), "Execution Time: %.6f seconds", duration_final.seconds());
+        // RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 1000,
+        //                      "Execution Time: %.6f seconds", duration_final.count());
 
         return;
     }
@@ -779,11 +863,11 @@ private:
                 0.0f);
 
         // Log the computed values
-        RCLCPP_INFO(this->get_logger(), "Safety Bubble Size: %zu points", bubble_size);
-        RCLCPP_INFO(this->get_logger(), "Closest Index: %zu", closest_idx);
-        RCLCPP_INFO(this->get_logger(), "Start Index: %zu", start_idx);
-        RCLCPP_INFO(this->get_logger(), "End Index: %zu", end_idx);
-        RCLCPP_INFO(this->get_logger(), "Safety Bubble Theta: %.4f radians (%.2f degrees)", theta, theta * 180.0 / M_PI);
+        // RCLCPP_INFO(this->get_logger(), "Safety Bubble Size: %zu points", bubble_size);
+        // RCLCPP_INFO(this->get_logger(), "Closest Index: %zu", closest_idx);
+        // RCLCPP_INFO(this->get_logger(), "Start Index: %zu", start_idx);
+        // RCLCPP_INFO(this->get_logger(), "End Index: %zu", end_idx);
+        // RCLCPP_INFO(this->get_logger(), "Safety Bubble Theta: %.4f radians (%.2f degrees)", theta, theta * 180.0 / M_PI);
     }
 
 
@@ -850,9 +934,9 @@ private:
                             r1);
 
                     // Debugging: Log disparity extender actions
-                    RCLCPP_INFO(this->get_logger(),
-                                "Applied disparity extender at index %zu with theta %.4f degrees and num_points %zu, car_width_portion %.3f, min_range %0.3f",
-                                i, theta*180.0/3.1415, num_points, car_width_portion, min_range);
+                    // RCLCPP_INFO(this->get_logger(),
+                    //             "Applied disparity extender at index %zu with theta %.4f degrees and num_points %zu, car_width_portion %.3f, min_range %0.3f",
+                                // i, theta*180.0/3.1415, num_points, car_width_portion, min_range);
                     i = i + num_points;
                 }
                 else
@@ -1030,8 +1114,8 @@ private:
             return {0, 0};
         }
 
-        RCLCPP_INFO(this->get_logger(), "Selected sub-window from index %zu to %zu with average range %.2f meters.",
-                    best_sub_start, best_sub_end, max_avg_range);
+        // RCLCPP_INFO(this->get_logger(), "Selected sub-window from index %zu to %zu with average range %.2f meters.",
+                    // best_sub_start, best_sub_end, max_avg_range);
 
         return {best_sub_start, best_sub_end};
     }
@@ -1412,10 +1496,16 @@ private:
         return;
     }
     
+    /*****************************************************************/
+    /*               State Machine Helper Functinos                  */
+    /*****************************************************************/
     bool areLapsCompleted(void)
     {
-        if (lap_count_ == NUMBER_OF_LAPS_PER_MISSION && is_line_in_entrance_) return true;
-        return false;
+        {
+            if (lap_count_ == NUMBER_OF_LAPS_PER_MISSION && is_line_in_entrance_) return true;
+            return false;
+        }
+        
     }
     bool inZone()
     {
@@ -1427,11 +1517,88 @@ private:
         return true;
     }
 
-    bool isParkFound()
+    bool isParkingFound()
     {
-        // TODO Implement
-        return false;
+        // Define the label we're looking for, e.g., 4.0 for the parking spot (pink color)
+        float parking_label = 4.0;
+
+        // Collect indices where intensities match the parking label
+        std::vector<size_t> parking_indices;
+        for (size_t i = 0; i < processed_scan_.intensities.size(); ++i)
+        {
+            if (processed_scan_.intensities[i] == parking_label)
+            {
+                parking_indices.push_back(i);
+            }
+        }
+
+        // If no indices found, return false and zeros
+        if (parking_indices.empty())
+        {
+            RCLCPP_INFO(this->get_logger(), "No parking spot found in intensities.");
+            return false;
+        }
+        else
+        {
+            RCLCPP_INFO(this->get_logger(), "parking spot found in intensities.");
+            return true;
+        }
+
+        // Find the minimum and maximum indices
+        size_t min_idx = *std::min_element(parking_indices.begin(), parking_indices.end());
+        size_t max_idx = *std::max_element(parking_indices.begin(), parking_indices.end());
+
+        // Calculate the angle between min and max indices
+        float angle_increment = processed_scan_.angle_increment;
+        float angle_min = processed_scan_.angle_min;
+        float angle1 = angle_min + min_idx * angle_increment;
+        float angle2 = angle_min + max_idx * angle_increment;
+        float angle_between = std::abs(angle2 - angle1);
+
+        // Define a threshold angle (you can adjust this value)
+        // float min_parking_angle = min_parking_angle_; // Defined as a parameter
+
+        // // If the angle is less than the threshold, return false and zeros
+        // if (angle_between < min_parking_angle)
+        // {
+        //     RCLCPP_DEBUG(this->get_logger(), "Parking spot angle %.4f is less than threshold %.4f.", angle_between, min_parking_angle);
+        //     return false;
+        // }
+
+        // Retrieve the ranges at min_idx and max_idx
+        float range1 = processed_scan_.ranges[min_idx];
+        float range2 = processed_scan_.ranges[max_idx];
+
+        // Calculate the length of the parking slot using the Law of Cosines
+        // d = sqrt(r1^2 + r2^2 - 2*r1*r2*cos(theta))
+        float parking_length = std::sqrt(range1 * range1 + range2 * range2 - 2 * range1 * range2 * std::cos(angle_between));
+
+        // Define a minimum parking length threshold
+        float min_parking_length = min_parking_length_; // Defined as a parameter
+
+        // If the parking length is less than the threshold, return false and zeros
+        if (parking_length < min_parking_length)
+        {
+            RCLCPP_WARN(this->get_logger(), "Parking spot length %.4f is less than minimum required length %.4f.", parking_length, min_parking_length);
+            return false;
+        }
+
+        // Parking spot found; store min_idx and max_idx if needed
+        parking_start_idx_ = min_idx;
+        parking_end_idx_ = max_idx;
+
+        RCLCPP_INFO(this->get_logger(), "Parking spot found between indices %zu and %zu with angle %.4f radians and length %.4f meters.",
+                    min_idx, max_idx, angle_between, parking_length);
+
+        return true;
     }
+
+    void stopRobot()
+    {
+        publishDriveCommand(0.0, 0.0);
+    }
+
+
 };
 
 int main(int argc, char **argv)
