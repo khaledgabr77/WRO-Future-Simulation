@@ -109,7 +109,7 @@ class Lidar2ImageNode(Node):
             class_id = detection.class_id
 
             # Process only red and green objects (assuming class IDs 0 and 1)
-            if class_id in [1, 2,3]:
+            if class_id in [2, 4,5]:
                 bbox = detection.bbox
                 image_width = image_msg.width
                 image_height = image_msg.height
@@ -130,13 +130,13 @@ class Lidar2ImageNode(Node):
                 # if class_id == 0:
                 #     color = (0, 0, 0)  # Black
                 #     label_text = "Black"
-                if class_id == 1:
+                if class_id == 2:
                     color = (0, 255, 0)  # Green
                     label_text = "Green"
-                elif class_id == 2:
+                elif class_id == 4:
                     color = (203, 192, 255) # parking gate color (pink)
                     label_text = "Parking"
-                elif class_id == 3:
+                elif class_id == 5:
                     color = (0, 0, 255)  # Red
                     label_text = "Red"
                 else:
@@ -150,11 +150,11 @@ class Lidar2ImageNode(Node):
             # if labels[i] != 0:
             # if labels[i] == 0:
             #     color = (0, 0, 0)  # Black
-            if labels[i] == 1:
+            if labels[i] == 2:
                 color = (0, 255, 0)  # Green
-            elif labels[i] == 2:
+            elif labels[i] == 4:
                     color = (203, 192, 255) # parking gate color (pink)
-            elif labels[i] == 3:
+            elif labels[i] == 5:
                     color = (0, 0, 255)  # red
             else:
                 # color = (255, 0, 0)  # Blue
@@ -334,7 +334,7 @@ class Lidar2ImageNode(Node):
             class_id = detection.class_id
 
             # Process only red and green objects (assuming class IDs 0 and 1)
-            if class_id in [1, 2, 3]:
+            if class_id in [2, 4, 5]:
                 # Get bounding box coordinates
                 bbox = detection.bbox
                 image_width = image_msg.width
