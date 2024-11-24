@@ -73,7 +73,7 @@
       </sensor>
     </link>
     <link name="FrontRightwheel">
-      <pose relative_to="FrontRightwheelJoint">0 0 0 0 0 0</pose>
+      <pose relative_to="FrontRightwheelJoint">0 0.05 0 0 0 0</pose>
       <inertial>
         <mass>.05</mass>
         <inertia>
@@ -91,6 +91,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
+            <scale>0.5 0.5 0.5</scale>
+
             <uri>meshes/wheel.dae</uri>
           </mesh>
         </geometry>
@@ -115,7 +117,7 @@
       </collision>
     </link>
     <link name="FrontRightwheelSteering">
-      <pose relative_to="FrontRightwheelSteeringJoint">0 0 0 0 0 0</pose>
+      <pose relative_to="FrontRightwheelSteeringJoint">0 0.05 -0.02 0 0 0</pose>
       <inertial>
         <mass>0.005</mass>
         <inertia>
@@ -126,7 +128,7 @@
       </inertial>
     </link>
     <link name="FrontLeftwheel">
-      <pose relative_to="FrontLeftwheelJoint">0 0 0 0 0 0</pose>
+      <pose relative_to="FrontLeftwheelJoint">0 -0.05 0 0 0 0</pose>
       <inertial>
         <mass>.05</mass>
         <inertia>
@@ -144,6 +146,8 @@
         <pose>0 0 0 0 0 3.14159</pose>
         <geometry>
           <mesh>
+            <scale>0.5 0.5 0.5</scale>
+
             <uri>meshes/wheel.dae</uri>
           </mesh>
         </geometry>
@@ -168,7 +172,7 @@
       </collision>
     </link>
     <link name="FrontLeftwheelSteering">
-      <pose relative_to="FrontLeftwheelSteeringJoint">0 0 0 0 0 0</pose>
+      <pose relative_to="FrontLeftwheelSteeringJoint">0 -0.05 0 0 0 0</pose>
       <inertial>
         <mass>0.005</mass>
         <inertia>
@@ -179,7 +183,7 @@
       </inertial>
     </link>
     <link name="RearRightwheel">
-      <pose relative_to="RearRightwheelJoint">0 0 0 0 0 0</pose>
+      <pose relative_to="RearRightwheelJoint">0 0.05 0 0 0 0</pose>
       <inertial>
         <mass>.05</mass>
         <inertia>
@@ -197,6 +201,8 @@
         <pose>0 0 0 0 0 0</pose>
         <geometry>
           <mesh>
+            <scale>0.5 0.5 0.5</scale>
+
             <uri>meshes/wheel.dae</uri>
           </mesh>
         </geometry>
@@ -221,7 +227,7 @@
       </collision>
     </link>
     <link name="RearLeftwheel">
-      <pose relative_to="RearLeftwheelJoint">0 0 0 0 0 0</pose>
+      <pose relative_to="RearLeftwheelJoint">0 -0.05 0 0 0 0</pose>
       <inertial>
         <mass>.05</mass>
         <inertia>
@@ -239,6 +245,8 @@
         <pose>0 0 0 0 0 3.14159</pose>
         <geometry>
           <mesh>
+            <scale>0.5 0.5 0.5</scale>
+
             <uri>meshes/wheel.dae</uri>
           </mesh>
         </geometry>
@@ -372,7 +380,7 @@
     <joint name="FrontRightwheelSteeringJoint" type="revolute">
       <parent>base_link</parent>
       <child>FrontRightwheelSteering</child>
-      <pose relative_to="base_link">.112 -.10 0 0 0 0</pose>
+      <pose relative_to="base_link">.062 -.10 0 0 0 0</pose>
       <axis>
         <xyz>0 0 1</xyz>
         <limit>
@@ -403,7 +411,7 @@
     <joint name="FrontLeftwheelSteeringJoint" type="revolute">
       <parent>base_link</parent>
       <child>FrontLeftwheelSteering</child>
-      <pose relative_to="base_link">.112 .10 0 0 0 0</pose>
+      <pose relative_to="base_link">0.062 .10 0 0 0 0</pose>
       <axis>
         <xyz>0 0 1</xyz>
         <limit>
@@ -433,7 +441,7 @@
     <joint name="RearRightwheelJoint" type="revolute">
       <parent>base_link</parent>
       <child>RearRightwheel</child>
-      <pose relative_to="base_link">-.1135 -.10 0 0 0 0</pose>
+      <pose relative_to="base_link">-.1 -.10 0 0 0 0</pose>
       <axis>
         <xyz>0 1 0</xyz>
         <limit>
@@ -449,7 +457,7 @@
     <joint name="RearLeftwheelJoint" type="revolute">
       <parent>base_link</parent>
       <child>RearLeftwheel</child>
-      <pose relative_to="base_link">-.1135 .10 0 0 0 0</pose>
+      <pose relative_to="base_link">-.1 .10 0 0 0 0</pose>
       <axis>
         <xyz>0 1 0</xyz>
         <limit>
@@ -494,7 +502,7 @@
       <right_steering_joint>FrontRightwheelSteeringJoint</right_steering_joint>
       <kingpin_width>0.199</kingpin_width>
       <steering_limit>0.4</steering_limit>
-      <wheel_base>.2255</wheel_base>
+      <wheel_base>.1755</wheel_base>
       <wheel_separation>.2</wheel_separation>
       <wheel_radius>0.0365</wheel_radius>
       <min_velocity>-10.0</min_velocity>

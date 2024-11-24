@@ -1,0 +1,521 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sdf version="1.7">
+  <model name="mrbuggy3">
+    <!-- <pose>0 -0.3 0 0 0 0</pose> -->
+
+    <self_collide>false</self_collide>
+    <static>false</static>
+    <link name="base_link">
+      <pose>0 0 0.04 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>3.0</mass>
+        <inertia>
+          <ixx>0.0054</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0252</iyy>
+          <iyz>0</iyz>
+          <izz>0.0252</izz>
+        </inertia>
+      </inertial>
+      <visual name="BaseVisual">
+        <pose>-.008 0 -.0202 0 0 1.5707</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/mrbuggy3.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="BaseCollision">
+        <pose>0 0 .06 0 0 0</pose>
+        <geometry>
+          <box>
+            <size>.3 .09 .12</size>
+          </box>
+        </geometry>
+      </collision>
+    </link>
+    <link name="base_footprint"/>
+    <link name="sensors">
+      <pose>0 0 0 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.0000001</mass>
+        <inertia>
+          <ixx>0.000000000001</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.000000000001</iyy>
+          <iyz>0</iyz>
+          <izz>0.000000000001</izz>
+        </inertia>
+      </inertial>
+      <sensor name="imu_sensor" type="imu">
+        <always_on>1</always_on>
+        <update_rate>250</update_rate>
+      </sensor>
+      <sensor name="mag_sensor" type="magnetometer">
+        <always_on>1</always_on>
+        <update_rate>50</update_rate>
+      </sensor>
+      <sensor name="altimeter_sensor" type="altimeter">
+        <always_on>1</always_on>
+        <update_rate>50</update_rate>
+      </sensor>
+      <sensor name="navsat_sensor" type="navsat">
+        <always_on>1</always_on>
+        <update_rate>10</update_rate>
+        <navsat>
+          <position_sensing></position_sensing>
+          <velocity_sensing></velocity_sensing>
+        </navsat>
+      </sensor>
+    </link>
+    <link name="FrontRightwheel">
+      <pose relative_to="FrontRightwheelJoint">0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>.05</mass>
+        <inertia>
+          <ixx>0.00003331</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0000204</iyy>
+          <iyz>0</iyz>
+          <izz>0.0000204</izz>
+        </inertia>
+      </inertial>
+      <gravity>true</gravity>
+      <velocity_decay/>
+      <visual name="FrontRightwheelVisual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/wheel.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="FrontRightwheelCollision">
+        <pose>0 .015 0 -1.5707 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.03</length>
+            <radius>0.0365</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>0.5</mu2>
+              <fdir1>0 0 1</fdir1>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="FrontRightwheelSteering">
+      <pose relative_to="FrontRightwheelSteeringJoint">0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>0.005</mass>
+        <inertia>
+          <ixx>0.0000018</ixx>
+          <iyy>0.0000018</iyy>
+          <izz>0.0000018</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <link name="FrontLeftwheel">
+      <pose relative_to="FrontLeftwheelJoint">0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>.05</mass>
+        <inertia>
+          <ixx>0.00003331</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0000204</iyy>
+          <iyz>0</iyz>
+          <izz>0.0000204</izz>
+        </inertia>
+      </inertial>
+      <gravity>true</gravity>
+      <velocity_decay/>
+      <visual name="FrontLeftwheelVisual">
+        <pose>0 0 0 0 0 3.14159</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/wheel.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="FrontLeftwheelCollision">
+        <pose>0 -.015 0 -1.5707 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.03</length>
+            <radius>0.0365</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>0.5</mu2>
+              <fdir1>0 0 1</fdir1>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="FrontLeftwheelSteering">
+      <pose relative_to="FrontLeftwheelSteeringJoint">0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>0.005</mass>
+        <inertia>
+          <ixx>0.0000018</ixx>
+          <iyy>0.0000018</iyy>
+          <izz>0.0000018</izz>
+        </inertia>
+      </inertial>
+    </link>
+    <link name="RearRightwheel">
+      <pose relative_to="RearRightwheelJoint">0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>.05</mass>
+        <inertia>
+          <ixx>0.00003331</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0000204</iyy>
+          <iyz>0</iyz>
+          <izz>0.0000204</izz>
+        </inertia>
+      </inertial>
+      <gravity>true</gravity>
+      <velocity_decay/>
+      <visual name="RearRightwheelVisual">
+        <pose>0 0 0 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/wheel.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="RearRightwheelCollision">
+        <pose>0 .015 0 -1.5707 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.03</length>
+            <radius>0.0365</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>0.5</mu2>
+              <fdir1>0 0 1</fdir1>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+    <link name="RearLeftwheel">
+      <pose relative_to="RearLeftwheelJoint">0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>.05</mass>
+        <inertia>
+          <ixx>0.00003331</ixx>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0000204</iyy>
+          <iyz>0</iyz>
+          <izz>0.0000204</izz>
+        </inertia>
+      </inertial>
+      <gravity>true</gravity>
+      <velocity_decay/>
+      <visual name="RearLeftwheelVisual">
+        <pose>0 0 0 0 0 3.14159</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/wheel.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <collision name="RearLeftwheelCollision">
+        <pose>0 -.015 0 -1.5707 0 0</pose>
+        <geometry>
+          <cylinder>
+            <length>0.03</length>
+            <radius>0.0365</radius>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>0.5</mu2>
+              <fdir1>0 0 1</fdir1>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+    </link>
+
+    <link name="lidar_link">
+      <pose>.05 0 .09 0 0 0</pose>
+      <inertial>
+        <pose>0 0 0 0 0 0</pose>
+        <mass>0.17</mass>
+        <inertia>
+          <ixx>0.0001926666667</ixx> <!-- (.17/12)*(.1^2+.06^2) -->
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyy>0.0001224141667</iyy> <!-- (.17/12)*(.071^2+.06^2) -->
+          <iyz>0</iyz>
+          <izz>0.0002130808333</izz> <!-- (.17/12)*(.071^2+.1^2) -->
+        </inertia>
+      </inertial>
+      <visual name="visual">
+        <pose>0 0 -.028 0 0 0</pose>
+        <geometry>
+          <mesh>
+            <uri>meshes/STL27L.dae</uri>
+          </mesh>
+        </geometry>
+      </visual>
+      <sensor name="lidar" type="gpu_lidar">
+        <lidar>
+          <scan>
+            <horizontal>
+              <samples>400</samples>
+              <resolution>1</resolution>
+              <min_angle>-1.5707</min_angle>
+              <max_angle>1.5707</max_angle>
+            </horizontal>
+          </scan>
+          <range>
+            <min>0.15</min>
+            <max>25</max>
+            <resolution>0.01</resolution>
+          </range>
+        </lidar>
+        <gz_frame_id>lidar_link</gz_frame_id>
+        <alwaysOn>1</alwaysOn>
+        <visualize>true</visualize>
+        <update_rate>10</update_rate>
+      </sensor>
+    </link>         
+
+
+    <joint name="lidar_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>lidar_link</child>
+    </joint>
+   
+   
+    <link name="camera_link">
+      <!-- Position the camera_link as needed without rotation -->
+      <pose>0.05 0 0.15 0 0 0</pose>
+
+      <visual name="camera_visual">
+        <geometry>
+          <box>
+            <size>0.01 0.01 0.01</size> 
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.4 0.4 0.4</ambient>
+          <diffuse>0.4 0.4 0.4</diffuse>
+          <specular>0.1 0.1 0.1 1.0</specular>
+        </material>
+      </visual>
+
+      <collision name="camera_collision">
+        <geometry>
+          <box>
+            <size>0.01 0.01 0.01</size> 
+          </box>
+        </geometry>
+      </collision>
+
+      <sensor name="camera" type="camera">
+        <!-- Align sensor pose with the link without additional rotation -->
+        <pose relative_to='camera_link'>0 0 0 0 0 0</pose>
+        <camera>
+          <horizontal_fov>1.047</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+          </image>
+          <clip>
+            <near>0.05</near>
+            <far>200</far>
+          </clip>
+        </camera>
+        <!-- Set frame ID appropriately, typically 'camera_link' -->
+        <gz_frame_id>camera_link</gz_frame_id>
+
+        <always_on>1</always_on>
+        <update_rate>10</update_rate>
+        <visualize>1</visualize>
+      </sensor>
+    </link>
+
+    <joint name="camera_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>camera_link</child>
+      <pose>0 0 0 0 0 0</pose>
+    </joint>
+
+    <joint name="FrontRightwheelSteeringJoint" type="revolute">
+      <parent>base_link</parent>
+      <child>FrontRightwheelSteering</child>
+      <pose relative_to="base_link">.112 -.10 0 0 0 0</pose>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-0.6</lower>
+          <upper>0.6</upper>
+          <velocity>1000</velocity>
+          <effort>1000</effort>
+        </limit>
+      </axis>
+    </joint>
+
+    <joint name="FrontRightwheelJoint" type="revolute">
+      <parent>FrontRightwheelSteering</parent>
+      <child>FrontRightwheel</child>
+      <pose relative_to="FrontRightwheelSteeringJoint">0 0 0 0 0 0</pose>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1.79769e+308</lower>
+          <upper>1.79769e+308</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <joint name="FrontLeftwheelSteeringJoint" type="revolute">
+      <parent>base_link</parent>
+      <child>FrontLeftwheelSteering</child>
+      <pose relative_to="base_link">.112 .10 0 0 0 0</pose>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>-0.6</lower>
+          <upper>0.6</upper>
+          <velocity>1000</velocity>
+          <effort>1000</effort>
+        </limit>
+      </axis>
+    </joint>
+    <joint name="FrontLeftwheelJoint" type="revolute">
+      <parent>FrontLeftwheelSteering</parent>
+      <child>FrontLeftwheel</child>
+      <pose relative_to="FrontLeftwheelSteeringJoint">0 0 0 0 0 0</pose>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1.79769e+308</lower>
+          <upper>1.79769e+308</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <joint name="RearRightwheelJoint" type="revolute">
+      <parent>base_link</parent>
+      <child>RearRightwheel</child>
+      <pose relative_to="base_link">-.1135 -.10 0 0 0 0</pose>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1.79769e+308</lower>
+          <upper>1.79769e+308</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <joint name="RearLeftwheelJoint" type="revolute">
+      <parent>base_link</parent>
+      <child>RearLeftwheel</child>
+      <pose relative_to="base_link">-.1135 .10 0 0 0 0</pose>
+      <axis>
+        <xyz>0 1 0</xyz>
+        <limit>
+          <lower>-1.79769e+308</lower>
+          <upper>1.79769e+308</upper>
+        </limit>
+        <dynamics>
+          <spring_reference>0</spring_reference>
+          <spring_stiffness>0</spring_stiffness>
+        </dynamics>
+      </axis>
+    </joint>
+    <joint name="base_joint" type="fixed">
+      <parent>base_link</parent>
+      <child>base_footprint</child>
+      <pose>0.0 0.0 -0.04 0 0 0</pose>
+    </joint>
+    <joint name="SensorsJoint" type="fixed">
+        <parent>base_link</parent>
+        <child>sensors</child>
+        <pose>0.0 0.0 0.0 0 0 0</pose>
+    </joint>
+    <plugin
+        filename="gz-sim-joint-controller-system"
+        name="gz::sim::systems::JointController">
+      <joint_name>RearRightwheelJoint</joint_name>
+      <joint_name>RearLeftwheelJoint</joint_name>
+      <topic>drive</topic>
+    </plugin>
+
+    <plugin
+      filename="gz-sim-ackermann-steering-system"
+      name="gz::sim::systems::AckermannSteering">
+      <steering_only>true</steering_only>
+      <steer_p_gain>3.0</steer_p_gain>
+      <use_actuator_msg>false</use_actuator_msg>
+      <left_joint>FrontLeftwheelJoint</left_joint>
+      <left_joint>RearLeftwheelJoint</left_joint>
+      <right_joint>RearRightwheelJoint</right_joint>
+      <right_joint>FrontRightwheelJoint</right_joint>
+      <left_steering_joint>FrontLeftwheelSteeringJoint</left_steering_joint>
+      <right_steering_joint>FrontRightwheelSteeringJoint</right_steering_joint>
+      <kingpin_width>0.199</kingpin_width>
+      <steering_limit>0.4</steering_limit>
+      <wheel_base>.2255</wheel_base>
+      <wheel_separation>.2</wheel_separation>
+      <wheel_radius>0.0365</wheel_radius>
+      <min_velocity>-10.0</min_velocity>
+      <max_velocity>10.0</max_velocity>
+      <min_acceleration>-10</min_acceleration>
+      <max_acceleration>10</max_acceleration>
+      <!-- <topic>/cmd_vel</topic> -->
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_link</child_frame_id>
+    </plugin>
+    
+    <plugin
+      filename="gz-sim-joint-state-publisher-system"
+      name="gz::sim::systems::JointStatePublisher">
+      <joint_name>RearRightwheelJoint</joint_name>
+      <joint_name>RearLeftwheelJoint</joint_name>
+      <joint_name>FrontRightwheelJoint</joint_name>
+      <joint_name>FrontLeftwheelJoint</joint_name>
+      <joint_name>FrontRightwheelSteeringJoint</joint_name>
+      <joint_name>FrontLeftwheelSteeringJoint</joint_name>
+    </plugin>
+
+  </model>
+</sdf>
